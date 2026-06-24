@@ -7,7 +7,7 @@ class ApiConstants {
   // Dev backend. 10.0.2.2 is the host's localhost on the standard AVD emulator,
   // but LDPlayer needs the PC's LAN IP instead.
   // static const String baseUrl = 'http://10.0.2.2:3000'; // standard AVD
-  static const String baseUrl = 'http://192.168.100.46:3000'; // LDPlayer → host LAN IP
+  static const String baseUrl = 'http://127.0.0.1:3000'; // via `adb reverse tcp:3000 tcp:3000`
   static const String productionUrl = 'https://resqpk-backend.onrender.com';
 
   /// Dev build → local backend; release build → Render.

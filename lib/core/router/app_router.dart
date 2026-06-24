@@ -12,6 +12,10 @@ import '../../features/auth/screens/driver_register_screen.dart';
 import '../../features/auth/screens/login_screen.dart';
 import '../../features/auth/screens/medical_profile_screen.dart';
 import '../../features/home/screens/home_screen.dart';
+import '../../features/driver/screens/driver_home_screen.dart';
+import '../../features/driver/screens/driver_navigation_screen.dart';
+import '../../features/sos/screens/tracking_screen.dart';
+import '../../features/sos/screens/no_driver_screen.dart';
 
 /// Centralized route paths.
 class Routes {
@@ -24,7 +28,10 @@ class Routes {
   static const String login = '/login';
   static const String medicalProfile = '/medical-profile';
   static const String home = '/home';
+  static const String tracking = '/tracking';
+  static const String noDriver = '/no-driver';
   static const String driverHome = '/driver-home';
+  static const String driverNavigation = '/driver-navigation';
 }
 
 // Routes reachable without being authenticated.
@@ -117,18 +124,15 @@ final appRouter = GoRouter(
       pageBuilder: (c, s) => _page(const MedicalProfileScreen()),
     ),
     GoRoute(path: Routes.home, pageBuilder: (c, s) => _page(const HomeScreen())),
+    GoRoute(path: Routes.tracking, pageBuilder: (c, s) => _page(const TrackingScreen())),
+    GoRoute(path: Routes.noDriver, pageBuilder: (c, s) => _page(const NoDriverScreen())),
     GoRoute(
       path: Routes.driverHome,
-      pageBuilder: (c, s) => _page(const _DriverHomePlaceholder()),
+      pageBuilder: (c, s) => _page(const DriverHomeScreen()),
+    ),
+    GoRoute(
+      path: Routes.driverNavigation,
+      pageBuilder: (c, s) => _page(DriverNavigationScreen(caseId: s.extra as String? ?? '')),
     ),
   ],
 );
-
-// Module 2 placeholder; Module 3 replaces this route with the real DriverHomeScreen.
-class _DriverHomePlaceholder extends StatelessWidget {
-  const _DriverHomePlaceholder();
-
-  @override
-  Widget build(BuildContext context) =>
-      const Scaffold(body: Center(child: Text('Driver — pending verification')));
-}
