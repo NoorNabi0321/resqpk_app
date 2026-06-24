@@ -37,4 +37,9 @@ class SocketEvents {
   static const String caseUpdate = 'hospital:case_update';
   static const String ambulanceUpdate = 'hospital:ambulance_update';
   static const String bedStatusChanged = 'hospital:bed_status_changed';
+
+  // AI report (Module 6)
+  static const String aiProcessing = 'ai:processing';
+  static const String aiReportReady = 'ai:report_ready';
+  static const String aiError = 'ai:error';
 }

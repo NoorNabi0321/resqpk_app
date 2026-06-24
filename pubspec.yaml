@@ -74,9 +74,8 @@ dependencies:
   # Other
   url_launcher: ^6.2.5               # For missed call trigger
   image_picker: ^1.0.7               # Photo capture for AI report
-  # record: ^5.2.1                   # Audio recording — re-add in Module 6
-  #   (record_linux 0.7.2 is unmaintained and breaks the Android build against
-  #   record_platform_interface 1.6.0; not needed until the AI voice feature)
+  record: ^5.2.1                     # Audio recording (AI voice notes)
+  path_provider: ^2.1.4              # Temp dir for recorded audio files
   permission_handler: ^11.3.0        # Runtime permissions
   intl: ^0.19.0                      # Date/number formatting
   uuid: ^4.3.3                       # UUID generation

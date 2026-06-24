@@ -20,10 +20,16 @@ class SocketService {
       StreamController.broadcast();
   final StreamController<Map<String, dynamic>> _caseUpdateController =
       StreamController.broadcast();
+  final StreamController<Map<String, dynamic>> _aiReportController =
+      StreamController.broadcast();
 
   Stream<Map<String, dynamic>> get driverLocationStream => _driverLocationController.stream;
   Stream<Map<String, dynamic>> get etaUpdateStream => _etaUpdateController.stream;
   Stream<Map<String, dynamic>> get caseUpdateStream => _caseUpdateController.stream;
+
+  /// AI report lifecycle events, tagged with a normalized 'event' key:
+  /// 'processing' | 'report_ready' | 'error'.
+  Stream<Map<String, dynamic>> get aiReportStream => _aiReportController.stream;
 
   bool get isConnected => _isConnected;
   bool get isAuthenticated => _isAuthenticated;
@@ -84,6 +90,11 @@ class SocketService {
     socket.on(SocketEvents.caseCompleted, (d) => _emitCaseUpdate('completed', d));
     socket.on(SocketEvents.caseCancelled, (d) => _emitCaseUpdate('cancelled', d));
     socket.on(SocketEvents.noDriverFound, (d) => _emitCaseUpdate('no_driver_found', d));
+
+    // AI report lifecycle (Module 6).
+    socket.on(SocketEvents.aiProcessing, (d) => _aiReportController.add({'event': 'processing', ..._asMap(d)}));
+    socket.on(SocketEvents.aiReportReady, (d) => _aiReportController.add({'event': 'report_ready', ..._asMap(d)}));
+    socket.on(SocketEvents.aiError, (d) => _aiReportController.add({'event': 'error', ..._asMap(d)}));
   }
 
   void _emitCaseUpdate(String event, dynamic data) {
@@ -165,6 +176,7 @@ class SocketService {
     _driverLocationController.close();
     _etaUpdateController.close();
     _caseUpdateController.close();
+    _aiReportController.close();
     disconnect();
     _socket?.dispose();
   }

@@ -45,5 +45,11 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>ResQPK needs microphone access to record emergency voice notes</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>ResQPK needs photo access to attach injury images to emergency reports</string>
+	<key>NSCameraUsageDescription</key>
+	<string>ResQPK needs camera access to photograph injuries for emergency reports</string>
 </dict>
 </plist>

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui';
 
@@ -13,6 +14,9 @@ import '../../../core/constants/app_constants.dart';
 import '../../../core/constants/app_text_styles.dart';
 import '../../../core/realtime/realtime_provider.dart';
 import '../../../core/router/app_router.dart';
+import '../../ai_report/data/models/ai_report_model.dart';
+import '../../ai_report/providers/ai_report_provider.dart';
+import '../../ai_report/widgets/first_aid_suggestion_card.dart';
 import '../providers/sos_provider.dart';
 
 class TrackingScreen extends ConsumerStatefulWidget {
@@ -28,6 +32,10 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
   double _driverHeading = 0;
   int? _originalEtaSeconds;
 
+  bool _showFirstAidCard = false;
+  AIReportModel? _latestReport;
+  StreamSubscription<Map<String, dynamic>>? _aiSub;
+
   @override
   void initState() {
     super.initState();
@@ -37,6 +45,22 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
       _driverHeading = c.driverHeading ?? 0;
     }
     _originalEtaSeconds = c?.estimatedDriverArrivalSeconds;
+
+    // Surface first-aid guidance the moment the AI report is ready.
+    _aiSub = ref.read(socketServiceProvider).aiReportStream.listen((evt) {
+      if (evt['event'] == 'report_ready' && mounted) {
+        setState(() {
+          _latestReport = AIReportModel.fromJson(evt);
+          _showFirstAidCard = true;
+        });
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _aiSub?.cancel();
+    super.dispose();
   }
 
   Future<void> _call(String? phone) async {
@@ -200,17 +224,32 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
           ),
           Align(
             alignment: Alignment.bottomCenter,
-            child: _StatusCard(
-              driverName: c.driverName ?? 'Driver',
-              vehicleNumber: c.vehicleNumber ?? '',
-              etaText: _etaText(eta, ref.watch(sosProvider).status),
-              progress: progress,
-              hospitalName: c.hospitalName ?? 'Hospital',
-              onCallDriver: () => _call(c.driverPhone),
-              onAiReport: () => ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('AI report arrives in Module 6')),
-              ),
-              onCancel: _confirmCancel,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (_showFirstAidCard && _latestReport?.firstAidSuggestion != null)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+                    child: FirstAidSuggestionCard(
+                      suggestion: _latestReport!.firstAidSuggestion!,
+                      urgencyLevel: _latestReport!.urgencyLevel ?? 'unknown',
+                      onViewFullReport: () => context.push(Routes.aiReport, extra: c.id),
+                      onDismiss: () => setState(() => _showFirstAidCard = false),
+                    ),
+                  ),
+                _StatusCard(
+                  driverName: c.driverName ?? 'Driver',
+                  vehicleNumber: c.vehicleNumber ?? '',
+                  etaText: _etaText(eta, ref.watch(sosProvider).status),
+                  progress: progress,
+                  hospitalName: c.hospitalName ?? 'Hospital',
+                  hasReport: _latestReport != null ||
+                      (ref.watch(aiReportProvider).report?.isComplete ?? false),
+                  onCallDriver: () => _call(c.driverPhone),
+                  onAiReport: () => context.push(Routes.aiReport, extra: c.id),
+                  onCancel: _confirmCancel,
+                ),
+              ],
             ),
           ),
         ],
@@ -287,6 +326,7 @@ class _StatusCard extends StatelessWidget {
   final String etaText;
   final double progress;
   final String hospitalName;
+  final bool hasReport;
   final VoidCallback onCallDriver;
   final VoidCallback onAiReport;
   final VoidCallback onCancel;
@@ -297,6 +337,7 @@ class _StatusCard extends StatelessWidget {
     required this.etaText,
     required this.progress,
     required this.hospitalName,
+    this.hasReport = false,
     required this.onCallDriver,
     required this.onAiReport,
     required this.onCancel,
@@ -376,7 +417,7 @@ class _StatusCard extends StatelessWidget {
               OutlinedButton.icon(
                 onPressed: onAiReport,
                 icon: const Icon(Icons.smart_toy_outlined, color: AppColors.infoBlue, size: 18),
-                label: Text('Generate AI Report',
+                label: Text(hasReport ? 'View Full Report' : 'Generate AI Report',
                     style: AppTextStyles.caption.copyWith(color: AppColors.infoBlue)),
                 style: OutlinedButton.styleFrom(side: const BorderSide(color: AppColors.infoBlue)),
               ),
