@@ -10,7 +10,9 @@ import 'package:latlong2/latlong.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/constants/app_text_styles.dart';
+import '../../../core/connectivity/connectivity_provider.dart';
 import '../../../core/location/location_provider.dart';
+import '../../../core/location/gps_persistence_provider.dart';
 import '../../../core/realtime/realtime_provider.dart';
 import '../../../core/router/app_router.dart';
 import '../../auth/providers/auth_provider.dart';
@@ -35,6 +37,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       duration: const Duration(seconds: 2),
     )..repeat();
     Future.microtask(_warmLocation);
+    Future.microtask(_startGpsPersistence);
+  }
+
+  // Keep the backend's last-known location fresh so offline (SMS) SOS works.
+  Future<void> _startGpsPersistence() async {
+    final gps = ref.read(gpsPersistenceServiceProvider);
+    await gps.initialize();
+    gps.startPersisting();
   }
 
   Future<void> _warmLocation() async {
@@ -72,6 +82,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
 
     final user = ref.watch(currentUserProvider);
     final sos = ref.watch(sosProvider);
+    final isOnline = ref.watch(isOnlineProvider).value ?? true;
     final isConnected = ref.watch(socketServiceProvider).isConnected;
     final positionAsync = ref.watch(currentPositionStreamProvider);
     final locationService = ref.read(locationServiceProvider);
@@ -89,6 +100,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                 accuracyLabel:
                     position == null ? 'Locating' : locationService.getAccuracyLabel(position),
                 accuracyMeters: position?.accuracy,
+              ),
+              _OfflineBanner(
+                isOnline: isOnline,
+                onTap: () => context.push(Routes.offlineSos),
               ),
               const SizedBox(height: 16),
               Expanded(
@@ -327,6 +342,7 @@ class _SOSPanel extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final statusText = state.error ?? _statusText(state.status);
+    final isOnline = ref.watch(isOnlineProvider).value ?? true;
     return Column(
       mainAxisAlignment: MainAxisAlignment.end,
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -418,13 +434,23 @@ class _SOSPanel extends ConsumerWidget {
         Text(
           state.isSosCountingDown
               ? ''
-              : state.activeCaseId == null
-                  ? 'Hold 10 seconds to call for help'
-                  : 'Emergency case active',
+              : !isOnline
+                  ? 'Offline? Use the red banner above'
+                  : state.activeCaseId == null
+                      ? 'Hold 10 seconds to call for help'
+                      : 'Emergency case active',
           textAlign: TextAlign.center,
           style: AppTextStyles.caption,
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 10),
+        OutlinedButton.icon(
+          onPressed: () => context.push(Routes.offlineSos),
+          icon: const Icon(Icons.sms_outlined, size: 16, color: AppColors.textSecondary),
+          label: Text('SMS SOS (works offline)',
+              style: AppTextStyles.caption.copyWith(color: AppColors.textSecondary)),
+          style: OutlinedButton.styleFrom(side: const BorderSide(color: AppColors.borderGlass)),
+        ),
+        const SizedBox(height: 12),
         _BottomNav(
           onLogout: () async {
             await ref.read(authProvider.notifier).logout();
@@ -432,6 +458,38 @@ class _SOSPanel extends ConsumerWidget {
           },
         ),
       ],
+    );
+  }
+}
+
+class _OfflineBanner extends StatelessWidget {
+  final bool isOnline;
+  final VoidCallback onTap;
+
+  const _OfflineBanner({required this.isOnline, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: isOnline ? null : onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOut,
+        height: isOnline ? 0 : 44,
+        margin: EdgeInsets.only(top: isOnline ? 0 : 10),
+        decoration: BoxDecoration(
+          color: AppColors.sosRed.withValues(alpha: 0.9),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        alignment: Alignment.center,
+        clipBehavior: Clip.hardEdge,
+        child: isOnline
+            ? const SizedBox.shrink()
+            : Text(
+                '📵 Offline — Tap for SMS emergency',
+                style: AppTextStyles.caption.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
+              ),
+      ),
     );
   }
 }
@@ -444,7 +502,7 @@ class _ConnectivityPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = isConnected ? AppColors.confirmedGreen : AppColors.sosRed;
-    final label = isConnected ? 'Online' : 'Offline mode: Missed call available';
+    final label = isConnected ? 'Online' : 'Offline mode: SMS SOS available';
     return Align(
       alignment: Alignment.center,
       child: Container(

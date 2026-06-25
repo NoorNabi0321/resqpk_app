@@ -17,6 +17,7 @@ import '../../features/driver/screens/driver_navigation_screen.dart';
 import '../../features/sos/screens/tracking_screen.dart';
 import '../../features/sos/screens/no_driver_screen.dart';
 import '../../features/ai_report/screens/ai_report_screen.dart';
+import '../../features/offline_sos/screens/offline_sos_screen.dart';
 
 /// Centralized route paths.
 class Routes {
@@ -34,6 +35,7 @@ class Routes {
   static const String driverHome = '/driver-home';
   static const String driverNavigation = '/driver-navigation';
   static const String aiReport = '/ai-report';
+  static const String offlineSos = '/offline-sos';
 }
 
 // Routes reachable without being authenticated.
@@ -139,6 +141,10 @@ final appRouter = GoRouter(
     GoRoute(
       path: Routes.aiReport,
       pageBuilder: (c, s) => _page(AIReportScreen(caseId: s.extra as String? ?? '')),
+    ),
+    GoRoute(
+      path: Routes.offlineSos,
+      pageBuilder: (c, s) => _page(const OfflineSOSScreen()),
     ),
   ],
 );

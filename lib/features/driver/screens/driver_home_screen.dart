@@ -5,6 +5,7 @@ import 'package:geolocator/geolocator.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_text_styles.dart';
+import '../../../core/connectivity/connectivity_provider.dart';
 import '../../../core/location/location_provider.dart';
 import '../../../core/realtime/realtime_provider.dart';
 import '../../../core/router/app_router.dart';
@@ -87,6 +88,7 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
 
     final driverState = ref.watch(driverOnlineProvider);
     final isConnected = ref.watch(socketServiceProvider).isConnected;
+    final isOnline = ref.watch(isOnlineProvider).value ?? true;
     final positionAsync = ref.watch(currentPositionStreamProvider);
     final position = positionAsync.asData?.value ?? driverState.currentPosition;
 
@@ -102,6 +104,21 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
               Text('Driver', style: AppTextStyles.display.copyWith(fontSize: 28)),
               const SizedBox(height: 6),
               _connectionRow(isConnected),
+              if (!isOnline) ...[
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: AppColors.warningAmber.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppColors.warningAmber.withValues(alpha: 0.4)),
+                  ),
+                  child: Text(
+                    '📵 Offline — location updates paused. They resume automatically when back online.',
+                    style: AppTextStyles.caption.copyWith(color: AppColors.warningAmber),
+                  ),
+                ),
+              ],
               const SizedBox(height: 32),
               _toggle(driverState),
               const SizedBox(height: 24),
