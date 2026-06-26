@@ -9,6 +9,10 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_text_styles.dart';
+import '../../../core/router/app_router.dart';
+import '../../first_aid/data/models/first_aid_guide_model.dart';
+import '../../first_aid/providers/first_aid_provider.dart';
+import '../../first_aid/screens/first_aid_screen.dart' show kCategoryEmoji;
 import '../data/models/recording_state_model.dart';
 import '../providers/ai_report_provider.dart';
 
@@ -600,6 +604,9 @@ class _AIReportScreenState extends ConsumerState<AIReportScreen> {
                   style: AppTextStyles.body.copyWith(color: AppColors.confirmedGreen)),
             ],
           ).animate().fadeIn(delay: 400.ms),
+
+          _relevantGuides(r.emergencyType),
+
           const SizedBox(height: 12),
           ElevatedButton(
             onPressed: () => context.pop(),
@@ -712,6 +719,72 @@ class _AIReportScreenState extends ConsumerState<AIReportScreen> {
             ],
           ),
         ],
+      ),
+    );
+  }
+
+  // Contextual first-aid suggestions based on the report's emergency type.
+  Widget _relevantGuides(String? emergencyType) {
+    ref.watch(firstAidProvider); // rebuild once guides finish loading
+    final relevant = ref
+        .read(firstAidProvider.notifier)
+        .getRelevantGuidesForEmergency(emergencyType ?? '')
+        .take(3)
+        .toList();
+    if (relevant.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 16),
+        Text('📚 Relevant First Aid Guides', style: AppTextStyles.subtitle),
+        const SizedBox(height: 8),
+        SizedBox(
+          height: 104,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: relevant.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 10),
+            itemBuilder: (_, i) => _SmallGuideCard(
+              guide: relevant[i],
+              onTap: () => context.push(Routes.guideDetail, extra: relevant[i]),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _SmallGuideCard extends StatelessWidget {
+  const _SmallGuideCard({required this.guide, required this.onTap});
+  final FirstAidGuideModel guide;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 150,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceTwo,
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(kCategoryEmoji[guide.category] ?? '🩹', style: const TextStyle(fontSize: 22)),
+            const Spacer(),
+            Text(guide.titleEn,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: AppTextStyles.body.copyWith(color: Colors.white, fontSize: 13)),
+            const SizedBox(height: 2),
+            Text('${guide.stepsEn.length} steps  ›', style: AppTextStyles.caption),
+          ],
+        ),
       ),
     );
   }

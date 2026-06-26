@@ -5,7 +5,10 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'core/constants/app_colors.dart';
+import 'core/network/fcm_service.dart';
 import 'core/router/app_router.dart';
+import 'core/storage/secure_storage.dart';
+import 'features/first_aid/data/first_aid_repository.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -19,6 +22,13 @@ Future<void> main() async {
   }
 
   await Hive.initFlutter();
+
+  // Register for push notifications if already logged in (best-effort).
+  final savedToken = await SecureStorage.getToken();
+  if (savedToken != null && savedToken.isNotEmpty) {
+    await FCMService.initialize();
+    FirstAidRepository().syncInBackground(); // fire-and-forget content refresh
+  }
 
   runApp(const ProviderScope(child: ResQPKApp()));
 }

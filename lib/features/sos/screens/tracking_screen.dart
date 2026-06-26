@@ -17,6 +17,7 @@ import '../../../core/router/app_router.dart';
 import '../../ai_report/data/models/ai_report_model.dart';
 import '../../ai_report/providers/ai_report_provider.dart';
 import '../../ai_report/widgets/first_aid_suggestion_card.dart';
+import '../../first_aid/providers/first_aid_provider.dart';
 import '../providers/sos_provider.dart';
 
 class TrackingScreen extends ConsumerStatefulWidget {
@@ -234,6 +235,16 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
                       suggestion: _latestReport!.firstAidSuggestion!,
                       urgencyLevel: _latestReport!.urgencyLevel ?? 'unknown',
                       onViewFullReport: () => context.push(Routes.aiReport, extra: c.id),
+                      onSeeGuide: () {
+                        final relevant = ref
+                            .read(firstAidProvider.notifier)
+                            .getRelevantGuidesForEmergency(_latestReport!.emergencyType ?? '');
+                        if (relevant.isNotEmpty) {
+                          context.push(Routes.guideDetail, extra: relevant.first);
+                        } else {
+                          context.push(Routes.firstAid);
+                        }
+                      },
                       onDismiss: () => setState(() => _showFirstAidCard = false),
                     ),
                   ),

@@ -73,6 +73,7 @@ dependencies:
 
   # Other
   url_launcher: ^6.2.5               # For missed call trigger
+  share_plus: ^7.2.1                 # Share first aid guides
   image_picker: ^1.0.7               # Photo capture for AI report
   record: ^5.2.1                     # Audio recording (AI voice notes)
   path_provider: ^2.1.4              # Temp dir for recorded audio files

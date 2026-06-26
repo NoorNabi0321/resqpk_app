@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/network/fcm_service.dart';
 import '../data/auth_repository.dart';
 import '../data/models/user_model.dart';
 import '../data/models/driver_model.dart';
@@ -155,6 +156,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         medicalProfile: mp,
         role: 'patient',
       );
+      FCMService.initialize(); // register for push (best-effort)
       return true;
     } catch (e) {
       state = state.copyWith(isLoading: false, error: _msg(e));
@@ -178,6 +180,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         driver: driver,
         role: 'driver',
       );
+      FCMService.initialize(); // register for push (best-effort)
       return true;
     } catch (e) {
       state = state.copyWith(isLoading: false, error: _msg(e));

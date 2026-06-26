@@ -13,12 +13,14 @@ class FirstAidSuggestionCard extends StatelessWidget {
     required this.urgencyLevel,
     required this.onViewFullReport,
     required this.onDismiss,
+    this.onSeeGuide,
   });
 
   final String suggestion;
   final String urgencyLevel;
   final VoidCallback onViewFullReport;
   final VoidCallback onDismiss;
+  final VoidCallback? onSeeGuide;
 
   Color get _urgencyColor {
     switch (urgencyLevel) {
@@ -87,15 +89,32 @@ class FirstAidSuggestionCard extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
             ),
           ),
-          TextButton(
-            onPressed: onViewFullReport,
-            style: TextButton.styleFrom(
-              padding: EdgeInsets.zero,
-              minimumSize: const Size(0, 32),
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            ),
-            child: Text('View Full Report',
-                style: AppTextStyles.caption.copyWith(color: AppColors.infoBlue)),
+          Row(
+            children: [
+              TextButton(
+                onPressed: onViewFullReport,
+                style: TextButton.styleFrom(
+                  padding: EdgeInsets.zero,
+                  minimumSize: const Size(0, 32),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: Text('View Full Report',
+                    style: AppTextStyles.caption.copyWith(color: AppColors.infoBlue)),
+              ),
+              if (onSeeGuide != null) ...[
+                const Spacer(),
+                TextButton(
+                  onPressed: onSeeGuide,
+                  style: TextButton.styleFrom(
+                    padding: EdgeInsets.zero,
+                    minimumSize: const Size(0, 32),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  child: Text('See Guide →',
+                      style: AppTextStyles.caption.copyWith(color: AppColors.confirmedGreen)),
+                ),
+              ],
+            ],
           ),
         ],
       ),

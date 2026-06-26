@@ -18,6 +18,10 @@ import '../../features/sos/screens/tracking_screen.dart';
 import '../../features/sos/screens/no_driver_screen.dart';
 import '../../features/ai_report/screens/ai_report_screen.dart';
 import '../../features/offline_sos/screens/offline_sos_screen.dart';
+import '../../features/first_aid/screens/first_aid_screen.dart';
+import '../../features/first_aid/screens/guide_detail_screen.dart';
+import '../../features/first_aid/data/models/first_aid_guide_model.dart';
+import '../../features/profile/screens/profile_screen.dart';
 
 /// Centralized route paths.
 class Routes {
@@ -36,6 +40,9 @@ class Routes {
   static const String driverNavigation = '/driver-navigation';
   static const String aiReport = '/ai-report';
   static const String offlineSos = '/offline-sos';
+  static const String firstAid = '/first-aid';
+  static const String guideDetail = '/first-aid/guide';
+  static const String profile = '/profile';
 }
 
 // Routes reachable without being authenticated.
@@ -145,6 +152,18 @@ final appRouter = GoRouter(
     GoRoute(
       path: Routes.offlineSos,
       pageBuilder: (c, s) => _page(const OfflineSOSScreen()),
+    ),
+    GoRoute(
+      path: Routes.firstAid,
+      pageBuilder: (c, s) => _page(const FirstAidScreen()),
+    ),
+    GoRoute(
+      path: Routes.guideDetail,
+      pageBuilder: (c, s) => _page(GuideDetailScreen(guide: s.extra as FirstAidGuideModel)),
+    ),
+    GoRoute(
+      path: Routes.profile,
+      pageBuilder: (c, s) => _page(const ProfileScreen()),
     ),
   ],
 );

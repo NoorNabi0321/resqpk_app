@@ -16,6 +16,7 @@ import '../../../core/location/gps_persistence_provider.dart';
 import '../../../core/realtime/realtime_provider.dart';
 import '../../../core/router/app_router.dart';
 import '../../auth/providers/auth_provider.dart';
+import '../../first_aid/providers/first_aid_provider.dart';
 import '../../sos/providers/sos_provider.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
@@ -26,18 +27,29 @@ class HomeScreen extends ConsumerStatefulWidget {
 }
 
 class _HomeScreenState extends ConsumerState<HomeScreen>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   late final AnimationController _pulseController;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _pulseController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 2),
     )..repeat();
     Future.microtask(_warmLocation);
     Future.microtask(_startGpsPersistence);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      // Refresh content + session + connectivity when the app comes back.
+      ref.read(firstAidProvider.notifier).syncInBackground();
+      ref.read(authProvider.notifier).checkAuthStatus();
+      ref.read(connectivityServiceProvider).initialize();
+    }
   }
 
   // Keep the backend's last-known location fresh so offline (SMS) SOS works.
@@ -60,6 +72,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _pulseController.dispose();
     super.dispose();
   }
@@ -451,12 +464,7 @@ class _SOSPanel extends ConsumerWidget {
           style: OutlinedButton.styleFrom(side: const BorderSide(color: AppColors.borderGlass)),
         ),
         const SizedBox(height: 12),
-        _BottomNav(
-          onLogout: () async {
-            await ref.read(authProvider.notifier).logout();
-            if (context.mounted) context.go(Routes.roleSelect);
-          },
-        ),
+        const _BottomNav(),
       ],
     );
   }
@@ -529,13 +537,11 @@ class _ConnectivityPill extends StatelessWidget {
   }
 }
 
-class _BottomNav extends StatelessWidget {
-  final FutureOr<void> Function() onLogout;
-
-  const _BottomNav({required this.onLogout});
+class _BottomNav extends ConsumerWidget {
+  const _BottomNav();
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return ClipRRect(
       borderRadius: BorderRadius.circular(28),
       child: BackdropFilter(
@@ -552,12 +558,32 @@ class _BottomNav extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
               const _NavItem(icon: Icons.home_rounded, label: 'Home', active: true),
-              const _NavItem(icon: Icons.route_rounded, label: 'Track'),
-              const _NavItem(icon: Icons.medical_services_rounded, label: 'Aid'),
-              IconButton(
-                tooltip: 'Logout',
-                onPressed: () => onLogout(),
-                icon: const Icon(Icons.person_rounded, color: AppColors.textSecondary),
+              _NavItem(
+                icon: Icons.location_on_rounded,
+                label: 'Track',
+                onTap: () {
+                  if (ref.read(sosProvider).activeCaseId != null) {
+                    context.push(Routes.tracking);
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('No active emergency. Press SOS for help.'),
+                        backgroundColor: AppColors.surfaceTwo,
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  }
+                },
+              ),
+              _NavItem(
+                icon: Icons.medical_services_rounded,
+                label: 'Aid',
+                onTap: () => context.push(Routes.firstAid),
+              ),
+              _NavItem(
+                icon: Icons.person_rounded,
+                label: 'Profile',
+                onTap: () => context.push(Routes.profile),
               ),
             ],
           ),
@@ -571,24 +597,30 @@ class _NavItem extends StatelessWidget {
   final IconData icon;
   final String label;
   final bool active;
+  final VoidCallback? onTap;
 
   const _NavItem({
     required this.icon,
     required this.label,
     this.active = false,
+    this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
     final color = active ? AppColors.sosRed : AppColors.textSecondary;
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Icon(icon, color: color, size: active ? 24 : 21),
-        const SizedBox(height: 2),
-        Text(label, style: AppTextStyles.caption.copyWith(color: color, fontSize: 10)),
-      ],
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, color: color, size: active ? 24 : 21),
+          const SizedBox(height: 2),
+          Text(label, style: AppTextStyles.caption.copyWith(color: color, fontSize: 10)),
+        ],
+      ),
     );
   }
 }
