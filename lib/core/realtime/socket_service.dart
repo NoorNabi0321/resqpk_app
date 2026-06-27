@@ -13,6 +13,7 @@ class SocketService {
   bool _isConnected = false;
   bool _isAuthenticated = false;
   String? _activeCaseId;
+  String? _connectedUserId; // whose token the current socket was opened with
 
   final StreamController<Map<String, dynamic>> _driverLocationController =
       StreamController.broadcast();
@@ -33,12 +34,21 @@ class SocketService {
 
   bool get isConnected => _isConnected;
   bool get isAuthenticated => _isAuthenticated;
+  String? get connectedUserId => _connectedUserId;
 
-  Future<void> connect() async {
+  Future<void> connect({String? userId}) async {
     final token = await SecureStorage.getToken();
     if (token == null || token.isEmpty) {
       throw Exception('Not logged in');
     }
+
+    // Tear down any previous socket (e.g. after switching accounts) so we don't
+    // keep a stale session authenticated as the wrong user/role.
+    _socket?.dispose();
+    _socket = null;
+    _isConnected = false;
+    _isAuthenticated = false;
+    _connectedUserId = userId;
 
     _socket = io.io(
       ApiConstants.currentBaseUrl,
@@ -107,9 +117,11 @@ class SocketService {
   }
 
   void disconnect() {
-    _socket?.disconnect();
+    _socket?.dispose();
+    _socket = null;
     _isConnected = false;
     _isAuthenticated = false;
+    _connectedUserId = null;
   }
 
   // --- Driver emits ---------------------------------------------------------
