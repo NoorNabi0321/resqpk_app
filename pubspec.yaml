@@ -75,7 +75,9 @@ dependencies:
   url_launcher: ^6.2.5               # For missed call trigger
   share_plus: ^7.2.1                 # Share first aid guides
   image_picker: ^1.0.7               # Photo capture for AI report
-  record: ^5.2.1                     # Audio recording (AI voice notes)
+  record: ^6.0.0                     # Audio recording (AI voice notes). 6.x pulls
+                                     # record_linux 1.3.1 (fixed); 5.x pulled the
+                                     # broken 0.7.2 that failed the release build.
   path_provider: ^2.1.4              # Temp dir for recorded audio files
   permission_handler: ^11.3.0        # Runtime permissions
   intl: ^0.19.0                      # Date/number formatting
