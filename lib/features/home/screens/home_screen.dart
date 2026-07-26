@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -16,6 +17,7 @@ import '../../../core/location/gps_persistence_provider.dart';
 import '../../../core/realtime/realtime_provider.dart';
 import '../../../core/router/app_router.dart';
 import '../../auth/providers/auth_provider.dart';
+import '../../camps/providers/camps_provider.dart';
 import '../../first_aid/providers/first_aid_provider.dart';
 import '../../sos/providers/sos_provider.dart';
 
@@ -128,7 +130,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
               ),
               const SizedBox(height: 18),
               Expanded(
-                flex: 4,
+                flex: 6,
                 child: _SOSPanel(
                   state: sos,
                   isConnected: isConnected,
@@ -205,71 +207,140 @@ class _TopBar extends StatelessWidget {
   }
 }
 
-class _LocationMap extends StatelessWidget {
+class _LocationMap extends StatefulWidget {
   final double? lat;
   final double? lng;
 
   const _LocationMap({required this.lat, required this.lng});
 
   @override
+  State<_LocationMap> createState() => _LocationMapState();
+}
+
+class _LocationMapState extends State<_LocationMap> {
+  final MapController _controller = MapController();
+  bool _centeredOnUser = false;
+
+  LatLng get _center => LatLng(widget.lat ?? 25.3792, widget.lng ?? 68.3683);
+
+  @override
+  void didUpdateWidget(covariant _LocationMap oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Recenter on the user the first time a real GPS fix arrives, without
+    // fighting the user afterwards (they can pan/zoom freely).
+    if (!_centeredOnUser && widget.lat != null && widget.lng != null) {
+      _centeredOnUser = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _controller.move(_center, 15.5);
+      });
+    }
+  }
+
+  void _recenter() {
+    if (widget.lat == null || widget.lng == null) return;
+    _controller.move(_center, 15.5);
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final center = LatLng(lat ?? 25.3792, lng ?? 68.3683);
+    final hasFix = widget.lat != null && widget.lng != null;
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(24),
       child: Stack(
         children: [
-          AbsorbPointer(
-            child: FlutterMap(
-              options: MapOptions(
-                initialCenter: center,
-                initialZoom: 14.5,
-                interactionOptions: const InteractionOptions(flags: InteractiveFlag.none),
+          FlutterMap(
+            mapController: _controller,
+            options: MapOptions(
+              initialCenter: _center,
+              initialZoom: 15.5,
+              minZoom: 3,
+              maxZoom: 18,
+              interactionOptions: const InteractionOptions(
+                flags: InteractiveFlag.drag |
+                    InteractiveFlag.flingAnimation |
+                    InteractiveFlag.pinchZoom |
+                    InteractiveFlag.pinchMove |
+                    InteractiveFlag.doubleTapZoom,
               ),
-              children: [
-                TileLayer(
-                  urlTemplate: AppConstants.mapTileUrl,
-                  userAgentPackageName: 'com.resqpk.resqpk_app',
-                ),
+            ),
+            children: [
+              TileLayer(
+                urlTemplate: AppConstants.mapTileUrl,
+                userAgentPackageName: 'com.resqpk.resqpk_app',
+              ),
+              if (hasFix)
                 MarkerLayer(
                   markers: [
                     Marker(
-                      point: center,
+                      point: _center,
                       width: 72,
                       height: 72,
                       child: const _PatientPin(),
                     ),
                   ],
                 ),
-              ],
+            ],
+          ),
+          // Coordinates / status chip (bottom-left).
+          Positioned(
+            left: 12,
+            bottom: 12,
+            child: _MapChip(
+              child: Text(
+                hasFix
+                    ? '${widget.lat!.toStringAsFixed(5)}, ${widget.lng!.toStringAsFixed(5)}'
+                    : 'Finding your location...',
+                style: AppTextStyles.caption.copyWith(color: AppColors.textPrimary),
+              ),
             ),
           ),
-          Positioned.fill(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Colors.transparent,
-                    AppColors.background.withValues(alpha: 0.72),
-                  ],
+          // Recenter-on-me button (bottom-right).
+          Positioned(
+            right: 12,
+            bottom: 12,
+            child: GestureDetector(
+              onTap: _recenter,
+              child: _MapChip(
+                padding: const EdgeInsets.all(9),
+                child: Icon(
+                  Icons.my_location,
+                  size: 18,
+                  color: hasFix ? AppColors.sosRed : AppColors.textSecondary,
                 ),
               ),
             ),
           ),
-          Positioned(
-            left: 16,
-            right: 16,
-            bottom: 16,
-            child: Text(
-              lat == null || lng == null
-                  ? 'Finding your location...'
-                  : '${lat!.toStringAsFixed(5)}, ${lng!.toStringAsFixed(5)}',
-              style: AppTextStyles.caption.copyWith(color: AppColors.textPrimary),
-            ),
-          ),
         ],
+      ),
+    );
+  }
+}
+
+class _MapChip extends StatelessWidget {
+  final Widget child;
+  final EdgeInsets padding;
+
+  const _MapChip({
+    required this.child,
+    this.padding = const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Container(
+          padding: padding,
+          decoration: BoxDecoration(
+            color: AppColors.background.withValues(alpha: 0.55),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppColors.borderGlass),
+          ),
+          child: child,
+        ),
       ),
     );
   }
@@ -361,85 +432,24 @@ class _SOSPanel extends ConsumerWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _ConnectivityPill(isConnected: isConnected),
-        const SizedBox(height: 14),
         if (statusText != null) ...[
+          const SizedBox(height: 12),
           Text(
             statusText,
             textAlign: TextAlign.center,
             style: AppTextStyles.body.copyWith(color: AppColors.textSecondary),
           ),
-          const SizedBox(height: 14),
         ],
-        GestureDetector(
-          onLongPressStart: state.status == SOSStatus.idle
-              ? (_) => ref.read(sosProvider.notifier).startSOSCountdown()
-              : null,
-          onLongPressEnd: (_) {
-            if (state.isSosCountingDown) {
-              ref.read(sosProvider.notifier).cancelSOSCountdown();
-            }
-          },
-          child: AnimatedScale(
-            duration: const Duration(milliseconds: 180),
-            scale: state.isSosCountingDown ? 1.04 : 1,
-            child: AnimatedBuilder(
-              animation: pulse,
-              builder: (context, child) {
-                final ring = state.isSosCountingDown ? 0.0 : pulse.value;
-                return Stack(
-                  alignment: Alignment.center,
-                  clipBehavior: Clip.none,
-                  children: [
-                    if (!state.isSosCountingDown)
-                      Positioned.fill(
-                        child: Transform.scale(
-                          scale: 1 + (ring * 0.18),
-                          child: Container(
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(40),
-                              border: Border.all(
-                                color: AppColors.sosGlow.withValues(alpha: 0.6 * (1 - ring)),
-                                width: 3,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    child!,
-                  ],
-                );
+        Expanded(
+          child: Center(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final size = math
+                    .min(constraints.maxWidth, constraints.maxHeight)
+                    .clamp(0.0, 220.0)
+                    .toDouble();
+                return _emergencyButton(context, ref, size);
               },
-              child: Container(
-                height: 72,
-                decoration: BoxDecoration(
-                  color: AppColors.sosRed,
-                  borderRadius: BorderRadius.circular(36),
-                  boxShadow: const [BoxShadow(color: AppColors.sosGlow, blurRadius: 30)],
-                ),
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    if (state.isSosCountingDown)
-                      Positioned.fill(
-                        child: Padding(
-                          padding: const EdgeInsets.all(5),
-                          child: CircularProgressIndicator(
-                            value: (10 - state.sosCountdownSeconds) / 10,
-                            strokeWidth: 4,
-                            color: Colors.white,
-                            backgroundColor: Colors.white24,
-                          ),
-                        ),
-                      ),
-                    Text(
-                      state.isSosCountingDown
-                          ? 'Release to cancel (${state.sosCountdownSeconds})'
-                          : 'SOS EMERGENCY',
-                      style: AppTextStyles.buttonLabel,
-                    ),
-                  ],
-                ),
-              ),
             ),
           ),
         ),
@@ -456,6 +466,7 @@ class _SOSPanel extends ConsumerWidget {
           style: AppTextStyles.caption,
         ),
         const SizedBox(height: 10),
+        const _NearbyCampsCard(),
         OutlinedButton.icon(
           onPressed: () => context.push(Routes.offlineSos),
           icon: const Icon(Icons.sms_outlined, size: 16, color: AppColors.textSecondary),
@@ -466,6 +477,176 @@ class _SOSPanel extends ConsumerWidget {
         const SizedBox(height: 12),
         const _BottomNav(),
       ],
+    );
+  }
+
+  /// The circular hold-to-trigger SOS button. [size] is the diameter, chosen by
+  /// the parent LayoutBuilder to fit the available space.
+  Widget _emergencyButton(BuildContext context, WidgetRef ref, double size) {
+    final counting = state.isSosCountingDown;
+
+    return GestureDetector(
+      onLongPressStart: state.status == SOSStatus.idle
+          ? (_) => ref.read(sosProvider.notifier).startSOSCountdown()
+          : null,
+      onLongPressEnd: (_) {
+        if (state.isSosCountingDown) {
+          ref.read(sosProvider.notifier).cancelSOSCountdown();
+        }
+      },
+      child: AnimatedScale(
+        duration: const Duration(milliseconds: 180),
+        scale: counting ? 1.04 : 1,
+        child: AnimatedBuilder(
+          animation: pulse,
+          builder: (context, child) {
+            final ring = counting ? 0.0 : pulse.value;
+            return SizedBox(
+              width: size,
+              height: size,
+              child: Stack(
+                alignment: Alignment.center,
+                clipBehavior: Clip.none,
+                children: [
+                  // Idle: an expanding, fading halo ring around the circle.
+                  if (!counting)
+                    Transform.scale(
+                      scale: 1 + (ring * 0.26),
+                      child: Container(
+                        width: size,
+                        height: size,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: AppColors.sosGlow.withValues(alpha: 0.55 * (1 - ring)),
+                            width: 3,
+                          ),
+                        ),
+                      ),
+                    ),
+                  // Counting: the 10-second progress ring hugging the circle.
+                  if (counting)
+                    SizedBox(
+                      width: size + 8,
+                      height: size + 8,
+                      child: CircularProgressIndicator(
+                        value: (10 - state.sosCountdownSeconds) / 10,
+                        strokeWidth: 6,
+                        color: Colors.white,
+                        backgroundColor: Colors.white24,
+                      ),
+                    ),
+                  // The red circle itself.
+                  Container(
+                    width: size,
+                    height: size,
+                    decoration: const BoxDecoration(
+                      color: AppColors.sosRed,
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(color: AppColors.sosGlow, blurRadius: 40, spreadRadius: 2),
+                      ],
+                    ),
+                    child: child,
+                  ),
+                ],
+              ),
+            );
+          },
+          child: Center(
+            child: counting
+                ? Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        '${state.sosCountdownSeconds}',
+                        style: AppTextStyles.display.copyWith(
+                          color: Colors.white,
+                          fontSize: 56,
+                          height: 1,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Release to cancel',
+                        style: AppTextStyles.caption.copyWith(color: Colors.white70),
+                      ),
+                    ],
+                  )
+                : Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.sos_rounded, color: Colors.white, size: 46),
+                      const SizedBox(height: 4),
+                      Text(
+                        'EMERGENCY',
+                        style: AppTextStyles.buttonLabel.copyWith(
+                          fontSize: 15,
+                          letterSpacing: 1.5,
+                        ),
+                      ),
+                    ],
+                  ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Compact entry point to Nearby Camps. Renders nothing when there are no
+/// camps — the home screen stays uncluttered for the emergency case.
+class _NearbyCampsCard extends ConsumerWidget {
+  const _NearbyCampsCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final camps = ref.watch(nearbyCampsProvider).asData?.value ?? const [];
+    if (camps.isEmpty) return const SizedBox.shrink();
+
+    final nearest = camps.first;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: GestureDetector(
+        onTap: () => context.push(Routes.camps),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            color: AppColors.confirmedGreen.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: AppColors.confirmedGreen.withValues(alpha: 0.4)),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.medical_services_outlined,
+                  color: AppColors.confirmedGreen, size: 20),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${camps.length} free medical camp${camps.length == 1 ? '' : 's'} near you',
+                      style: AppTextStyles.caption.copyWith(
+                        color: AppColors.confirmedGreen,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${nearest.name}${nearest.distanceText != null ? ' · ${nearest.distanceText}' : ''}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTextStyles.caption,
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right, color: AppColors.confirmedGreen, size: 20),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

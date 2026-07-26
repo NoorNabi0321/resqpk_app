@@ -27,8 +27,8 @@ class ApiClient {
     return _asMap(res.data);
   }
 
-  Future<Map<String, dynamic>> get(String path) async {
-    final res = await _dio.get(path);
+  Future<Map<String, dynamic>> get(String path, {Map<String, dynamic>? queryParameters}) async {
+    final res = await _dio.get(path, queryParameters: queryParameters);
     return _asMap(res.data);
   }
 

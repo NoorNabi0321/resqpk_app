@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 
 import '../../../core/network/api_client.dart';
 import 'models/emergency_case_model.dart';
+import 'models/quick_message_model.dart';
 
 class SOSRepository {
   // POST /api/sos/trigger — returns a (partial) case with id/status/hospital.
@@ -62,6 +63,91 @@ class SOSRepository {
     try {
       final res = await apiClient.get('/api/cases/$caseId');
       return EmergencyCaseModel.fromJson(_data(res));
+    } catch (e) {
+      throw Exception(_err(e));
+    }
+  }
+
+  // GET /api/cases/:id/route → road-following polyline for the current leg.
+  // Returns { leg, coordinates: [{lat,lng},...], durationSeconds, distanceMeters }
+  Future<Map<String, dynamic>> getCaseRoute(String caseId) async {
+    try {
+      final res = await apiClient.get('/api/cases/$caseId/route');
+      return _data(res);
+    } catch (e) {
+      throw Exception(_err(e));
+    }
+  }
+
+  // GET /api/hospitals/nearby → emergency hospitals sorted by distance.
+  Future<List<Map<String, dynamic>>> getNearbyHospitals(double lat, double lng) async {
+    try {
+      final res = await apiClient.get(
+        '/api/hospitals/nearby',
+        queryParameters: {'lat': lat, 'lng': lng},
+      );
+      final d = res['data'];
+      if (d is List) return d.whereType<Map<String, dynamic>>().toList();
+      return [];
+    } catch (e) {
+      throw Exception(_err(e));
+    }
+  }
+
+  // PUT /api/cases/:id/hospital → change destination hospital mid-case.
+  Future<Map<String, dynamic>> changeHospital(String caseId, String hospitalId) async {
+    try {
+      final res = await apiClient.put(
+        '/api/cases/$caseId/hospital',
+        data: {'hospitalId': hospitalId},
+      );
+      return _data(res);
+    } catch (e) {
+      throw Exception(_err(e));
+    }
+  }
+
+  // GET /api/decisions/constants → preset messages (cached by the caller).
+  Future<List<QuickMessage>> getMessageConstants() async {
+    try {
+      final res = await apiClient.get('/api/decisions/constants');
+      final messages = _data(res)['quickMessages'];
+      if (messages is Map) {
+        return messages.values
+            .whereType<Map>()
+            .map((m) => QuickMessage.fromJson(Map<String, dynamic>.from(m)))
+            .toList();
+      }
+      return [];
+    } catch (e) {
+      throw Exception(_err(e));
+    }
+  }
+
+  // POST /api/decisions/message
+  Future<void> sendQuickMessage(String caseId, String messageKey) async {
+    try {
+      await apiClient.post(
+        '/api/decisions/message',
+        data: {'caseId': caseId, 'messageKey': messageKey},
+      );
+    } catch (e) {
+      throw Exception(_err(e));
+    }
+  }
+
+  // GET /api/decisions/messages/:caseId
+  Future<List<CaseMessage>> getCaseMessages(String caseId) async {
+    try {
+      final res = await apiClient.get('/api/decisions/messages/$caseId');
+      final list = res['data'];
+      if (list is List) {
+        return list
+            .whereType<Map>()
+            .map((m) => CaseMessage.fromJson(Map<String, dynamic>.from(m)))
+            .toList();
+      }
+      return [];
     } catch (e) {
       throw Exception(_err(e));
     }

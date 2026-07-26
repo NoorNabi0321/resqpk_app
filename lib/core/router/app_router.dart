@@ -22,6 +22,9 @@ import '../../features/first_aid/screens/first_aid_screen.dart';
 import '../../features/first_aid/screens/guide_detail_screen.dart';
 import '../../features/first_aid/data/models/first_aid_guide_model.dart';
 import '../../features/profile/screens/profile_screen.dart';
+import '../../features/camps/screens/camps_screen.dart';
+import '../../features/camps/screens/camp_detail_screen.dart';
+import '../../features/camps/data/models/camp_model.dart';
 
 /// Centralized route paths.
 class Routes {
@@ -43,6 +46,7 @@ class Routes {
   static const String firstAid = '/first-aid';
   static const String guideDetail = '/first-aid/guide';
   static const String profile = '/profile';
+  static const String camps = '/camps';
 }
 
 // Routes reachable without being authenticated.
@@ -164,6 +168,22 @@ final appRouter = GoRouter(
     GoRoute(
       path: Routes.profile,
       pageBuilder: (c, s) => _page(const ProfileScreen()),
+    ),
+    GoRoute(
+      path: Routes.camps,
+      pageBuilder: (c, s) => _page(const CampsScreen()),
+      routes: [
+        // Nested so /camps/:id keeps the list underneath in the back stack.
+        GoRoute(
+          path: ':id',
+          pageBuilder: (c, s) => _page(
+            CampDetailScreen(
+              campId: s.pathParameters['id'] ?? '',
+              camp: s.extra as CampModel?,
+            ),
+          ),
+        ),
+      ],
     ),
   ],
 );

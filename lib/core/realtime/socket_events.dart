@@ -27,6 +27,12 @@ class SocketEvents {
   static const String caseCompleted = 'emergency:case_completed';
   static const String caseCancelled = 'emergency:case_cancelled';
   static const String noDriverFound = 'emergency:no_driver_found';
+  static const String hospitalChanged = 'emergency:hospital_changed';
+
+  // v2 — hospital decisions on an incoming case.
+  static const String caseAccepted = 'case:accepted';
+  static const String caseRedirected = 'case:redirected';
+  static const String quickMessage = 'case:quick_message';
 
   // ETA
   static const String etaUpdate = 'eta:update';

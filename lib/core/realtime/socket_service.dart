@@ -100,6 +100,12 @@ class SocketService {
     socket.on(SocketEvents.caseCompleted, (d) => _emitCaseUpdate('completed', d));
     socket.on(SocketEvents.caseCancelled, (d) => _emitCaseUpdate('cancelled', d));
     socket.on(SocketEvents.noDriverFound, (d) => _emitCaseUpdate('no_driver_found', d));
+    socket.on(SocketEvents.hospitalChanged, (d) => _emitCaseUpdate('hospital_changed', d));
+
+    // v2 hospital decisions — driver and patient both listen in the case room.
+    socket.on(SocketEvents.caseAccepted, (d) => _emitCaseUpdate('hospital_accepted', d));
+    socket.on(SocketEvents.caseRedirected, (d) => _emitCaseUpdate('hospital_redirected', d));
+    socket.on(SocketEvents.quickMessage, (d) => _emitCaseUpdate('quick_message', d));
 
     // AI report lifecycle (Module 6).
     socket.on(SocketEvents.aiProcessing, (d) => _aiReportController.add({'event': 'processing', ..._asMap(d)}));

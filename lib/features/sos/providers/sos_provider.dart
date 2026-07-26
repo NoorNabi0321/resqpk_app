@@ -32,6 +32,10 @@ class SOSState {
   final int sosCountdownSeconds;
   final bool isSosCountingDown;
 
+  /// v2 — the destination hospital's decision: 'awaiting_review' | 'accepted'.
+  final String hospitalDecision;
+  final String? hospitalPreparationNote;
+
   const SOSState({
     this.activeCaseId,
     this.activeCase,
@@ -40,7 +44,11 @@ class SOSState {
     this.error,
     this.sosCountdownSeconds = 10,
     this.isSosCountingDown = false,
+    this.hospitalDecision = 'awaiting_review',
+    this.hospitalPreparationNote,
   });
+
+  bool get isHospitalConfirmed => hospitalDecision == 'accepted';
 
   SOSState copyWith({
     String? activeCaseId,
@@ -50,7 +58,10 @@ class SOSState {
     String? error,
     int? sosCountdownSeconds,
     bool? isSosCountingDown,
+    String? hospitalDecision,
+    String? hospitalPreparationNote,
     bool clearError = false,
+    bool clearPreparationNote = false,
   }) {
     return SOSState(
       activeCaseId: activeCaseId ?? this.activeCaseId,
@@ -60,6 +71,10 @@ class SOSState {
       error: clearError ? null : (error ?? this.error),
       sosCountdownSeconds: sosCountdownSeconds ?? this.sosCountdownSeconds,
       isSosCountingDown: isSosCountingDown ?? this.isSosCountingDown,
+      hospitalDecision: hospitalDecision ?? this.hospitalDecision,
+      hospitalPreparationNote: clearPreparationNote
+          ? null
+          : (hospitalPreparationNote ?? this.hospitalPreparationNote),
     );
   }
 }
@@ -210,6 +225,39 @@ class SOSNotifier extends StateNotifier<SOSState> {
         case 'no_driver_found':
           state = state.copyWith(status: SOSStatus.noDriverFound);
           break;
+        case 'hospital_changed':
+          state = state.copyWith(
+            activeCase: state.activeCase?.copyWith(
+              hospitalId: data['hospitalId']?.toString(),
+              hospitalName: data['hospitalName']?.toString(),
+              hospitalLat: _toD(data['hospitalLat']),
+              hospitalLng: _toD(data['hospitalLng']),
+            ),
+          );
+          break;
+        // v2 — the hospital accepted this patient.
+        case 'hospital_accepted':
+          state = state.copyWith(
+            hospitalDecision: 'accepted',
+            hospitalPreparationNote: data['preparationNote']?.toString(),
+          );
+          break;
+        // v2 — the hospital sent the case elsewhere. The patient sees the new
+        // destination, never the clinical reason.
+        case 'hospital_redirected':
+          final newHospital = data['newHospital'] as Map<String, dynamic>?;
+          state = state.copyWith(
+            hospitalDecision: 'awaiting_review',
+            hospitalPreparationNote: null,
+            clearPreparationNote: true,
+            activeCase: state.activeCase?.copyWith(
+              hospitalId: newHospital?['id']?.toString(),
+              hospitalName: newHospital?['name']?.toString(),
+              hospitalLat: _toD(newHospital?['lat']),
+              hospitalLng: _toD(newHospital?['lng']),
+            ),
+          );
+          break;
         case 'cancelled':
           DriverContactStorage.clearDriverContact();
           _cleanup();
@@ -248,6 +296,20 @@ class SOSNotifier extends StateNotifier<SOSState> {
     state = state.copyWith(
       activeCase: state.activeCase!.copyWith(
         estimatedDriverArrivalSeconds: eta.durationSeconds,
+      ),
+    );
+  }
+
+  // Apply a hospital change locally (called right after PUT /cases/:id/hospital
+  // so the UI updates even before the socket broadcast round-trips).
+  void applyHospitalChange({String? id, String? name, double? lat, double? lng}) {
+    if (state.activeCase == null) return;
+    state = state.copyWith(
+      activeCase: state.activeCase!.copyWith(
+        hospitalId: id,
+        hospitalName: name,
+        hospitalLat: lat,
+        hospitalLng: lng,
       ),
     );
   }

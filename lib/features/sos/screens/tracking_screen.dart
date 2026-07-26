@@ -18,6 +18,7 @@ import '../../ai_report/data/models/ai_report_model.dart';
 import '../../ai_report/providers/ai_report_provider.dart';
 import '../../ai_report/widgets/first_aid_suggestion_card.dart';
 import '../../first_aid/providers/first_aid_provider.dart';
+import '../data/sos_repository.dart';
 import '../providers/sos_provider.dart';
 
 class TrackingScreen extends ConsumerStatefulWidget {
@@ -29,13 +30,25 @@ class TrackingScreen extends ConsumerStatefulWidget {
 
 class _TrackingScreenState extends ConsumerState<TrackingScreen> {
   final MapController _mapController = MapController();
+  final SOSRepository _repo = SOSRepository();
   LatLng? _driverPos;
   double _driverHeading = 0;
   int? _originalEtaSeconds;
 
+  // Road-following route for the current leg (from /api/cases/:id/route).
+  List<LatLng> _routePoints = [];
+  String? _routeLeg;
+  Timer? _routeTimer;
+  bool _fetchingRoute = false;
+
   bool _showFirstAidCard = false;
   AIReportModel? _latestReport;
   StreamSubscription<Map<String, dynamic>>? _aiSub;
+
+  // v2 — brief banner when the hospital reroutes the ambulance.
+  String? _hospitalChangeBanner;
+  Timer? _bannerTimer;
+  StreamSubscription<Map<String, dynamic>>? _decisionSub;
 
   @override
   void initState() {
@@ -56,11 +69,158 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
         });
       }
     });
+
+    // Fetch the road route now and refresh it as the driver moves.
+    _fetchRoute();
+    _routeTimer = Timer.periodic(const Duration(seconds: 45), (_) => _fetchRoute());
+
+    // A redirect changes the destination — reassure the patient without
+    // surfacing the clinical reason, which is for the driver and records only.
+    _decisionSub = ref.read(socketServiceProvider).caseUpdateStream.listen((data) {
+      if (data['event'] != 'hospital_redirected' || !mounted) return;
+      final newHospital = data['newHospital'] as Map<String, dynamic>?;
+      final name = newHospital?['name']?.toString() ?? 'another hospital';
+      setState(() {
+        _hospitalChangeBanner = 'Hospital changed to $name for better care availability.';
+      });
+      _fetchRoute();
+      _bannerTimer?.cancel();
+      _bannerTimer = Timer(const Duration(seconds: 6), () {
+        if (mounted) setState(() => _hospitalChangeBanner = null);
+      });
+    });
+  }
+
+  Future<void> _fetchRoute() async {
+    final caseId = ref.read(sosProvider).activeCaseId;
+    if (caseId == null || _fetchingRoute) return;
+    _fetchingRoute = true;
+    try {
+      final route = await _repo.getCaseRoute(caseId);
+      final coords = (route['coordinates'] as List? ?? [])
+          .whereType<Map>()
+          .map((p) => LatLng(
+                double.tryParse('${p['lat']}') ?? 0,
+                double.tryParse('${p['lng']}') ?? 0,
+              ))
+          .toList();
+      if (mounted) {
+        setState(() {
+          _routePoints = coords;
+          _routeLeg = route['leg']?.toString();
+        });
+      }
+    } catch (_) {
+      // Straight-line fallback stays on screen if routing is unavailable.
+    } finally {
+      _fetchingRoute = false;
+    }
+  }
+
+  Future<void> _openChangeHospitalSheet() async {
+    final c = ref.read(sosProvider).activeCase;
+    if (c == null) return;
+    List<Map<String, dynamic>> hospitals = [];
+    try {
+      hospitals = await _repo.getNearbyHospitals(c.patientLat, c.patientLng);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not load hospitals: ${e.toString().replaceFirst('Exception: ', '')}')),
+        );
+      }
+      return;
+    }
+    if (!mounted) return;
+
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: AppColors.surfaceOne,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetCtx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 18, 20, 6),
+              child: Text('Choose hospital', style: AppTextStyles.subtitle),
+            ),
+            Flexible(
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: hospitals.length,
+                itemBuilder: (_, i) {
+                  final h = hospitals[i];
+                  final id = h['id']?.toString() ?? '';
+                  final isCurrent = id == ref.read(sosProvider).activeCase?.hospitalId;
+                  return ListTile(
+                    leading: Icon(
+                      Icons.local_hospital,
+                      color: isCurrent ? AppColors.confirmedGreen : AppColors.textSecondary,
+                    ),
+                    title: Text(h['name']?.toString() ?? 'Hospital', style: AppTextStyles.body),
+                    subtitle: Text(
+                      '${h['distanceText'] ?? ''} · ${h['address'] ?? ''}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTextStyles.caption,
+                    ),
+                    trailing: isCurrent
+                        ? const Icon(Icons.check_circle, color: AppColors.confirmedGreen, size: 20)
+                        : null,
+                    onTap: isCurrent
+                        ? null
+                        : () {
+                            Navigator.of(sheetCtx).pop();
+                            _changeHospital(h);
+                          },
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _changeHospital(Map<String, dynamic> hospital) async {
+    final caseId = ref.read(sosProvider).activeCaseId;
+    final id = hospital['id']?.toString();
+    if (caseId == null || id == null) return;
+    try {
+      await _repo.changeHospital(caseId, id);
+      ref.read(sosProvider.notifier).applyHospitalChange(
+            id: id,
+            name: hospital['name']?.toString(),
+            lat: double.tryParse('${hospital['lat']}'),
+            lng: double.tryParse('${hospital['lng']}'),
+          );
+      _fetchRoute();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Hospital changed to ${hospital['name']}')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+        );
+      }
+    }
   }
 
   @override
   void dispose() {
     _aiSub?.cancel();
+    _decisionSub?.cancel();
+    _routeTimer?.cancel();
+    _bannerTimer?.cancel();
     super.dispose();
   }
 
@@ -113,6 +273,13 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
         _mapController.move(_driverPos!, _mapController.camera.zoom);
       });
     });
+
+    // Refetch the road route whenever the leg changes (status transition) or
+    // the destination hospital is switched.
+    ref.listen(
+      sosProvider.select((s) => '${s.status}:${s.activeCase?.hospitalId}'),
+      (_, __) => _fetchRoute(),
+    );
 
     // Navigate home when the case completes or is cancelled.
     ref.listen(sosProvider.select((s) => s.status), (_, status) {
@@ -175,13 +342,24 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
               ),
               PolylineLayer(
                 polylines: [
-                  if (driver != null)
-                    Polyline(points: [driver, patient], color: AppColors.infoBlue, strokeWidth: 4),
-                  if (hospital != null)
+                  // Road-following route for the current leg (pickup = blue
+                  // driver→patient; dropoff = green →hospital). Falls back to a
+                  // straight line only while the road route hasn't loaded yet.
+                  if (_routePoints.length >= 2)
+                    Polyline(
+                      points: _routePoints,
+                      color: _routeLeg == 'dropoff'
+                          ? AppColors.confirmedGreen
+                          : AppColors.infoBlue,
+                      strokeWidth: 5,
+                    )
+                  else if (_routeLeg != 'dropoff' && driver != null)
+                    Polyline(points: [driver, patient], color: AppColors.infoBlue, strokeWidth: 4)
+                  else if (_routeLeg == 'dropoff' && hospital != null)
                     Polyline(
                       points: [patient, hospital],
-                      color: AppColors.textSecondary.withValues(alpha: 0.6),
-                      strokeWidth: 3,
+                      color: AppColors.confirmedGreen.withValues(alpha: 0.7),
+                      strokeWidth: 4,
                     ),
                 ],
               ),
@@ -228,6 +406,30 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                if (_hospitalChangeBanner != null)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: AppColors.infoBlue.withValues(alpha: 0.16),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: AppColors.infoBlue.withValues(alpha: 0.5)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.info_outline, color: AppColors.infoBlue, size: 18),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              _hospitalChangeBanner!,
+                              style: AppTextStyles.caption.copyWith(color: AppColors.textPrimary),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                 if (_showFirstAidCard && _latestReport?.firstAidSuggestion != null)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
@@ -259,6 +461,9 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
                   onCallDriver: () => _call(c.driverPhone),
                   onAiReport: () => context.push(Routes.aiReport, extra: c.id),
                   onCancel: _confirmCancel,
+                  onChangeHospital: _openChangeHospitalSheet,
+                  hospitalConfirmed: ref.watch(sosProvider).isHospitalConfirmed,
+                  preparationNote: ref.watch(sosProvider).hospitalPreparationNote,
                 ),
               ],
             ),
@@ -341,6 +546,9 @@ class _StatusCard extends StatelessWidget {
   final VoidCallback onCallDriver;
   final VoidCallback onAiReport;
   final VoidCallback onCancel;
+  final VoidCallback onChangeHospital;
+  final bool hospitalConfirmed;
+  final String? preparationNote;
 
   const _StatusCard({
     required this.driverName,
@@ -352,6 +560,9 @@ class _StatusCard extends StatelessWidget {
     required this.onCallDriver,
     required this.onAiReport,
     required this.onCancel,
+    required this.onChangeHospital,
+    this.hospitalConfirmed = false,
+    this.preparationNote,
   });
 
   @override
@@ -421,9 +632,47 @@ class _StatusCard extends StatelessWidget {
                   const Icon(Icons.local_hospital, color: AppColors.confirmedGreen, size: 18),
                   const SizedBox(width: 8),
                   Expanded(child: Text(hospitalName, style: AppTextStyles.body)),
-                  Text('Emergency ward ✓', style: AppTextStyles.caption),
+                  if (hospitalConfirmed)
+                    TweenAnimationBuilder<double>(
+                      tween: Tween(begin: 0.85, end: 1),
+                      duration: const Duration(milliseconds: 320),
+                      curve: Curves.easeOutBack,
+                      builder: (context, scale, child) =>
+                          Transform.scale(scale: scale, child: child),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: AppColors.confirmedGreen.withValues(alpha: 0.18),
+                          borderRadius: BorderRadius.circular(999),
+                          border: Border.all(color: AppColors.confirmedGreen),
+                        ),
+                        child: Text(
+                          'Hospital confirmed ✓',
+                          style: AppTextStyles.caption
+                              .copyWith(color: AppColors.confirmedGreen, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    )
+                  else
+                    TextButton(
+                      onPressed: onChangeHospital,
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        minimumSize: const Size(0, 32),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      child: Text(
+                        'Change',
+                        style: AppTextStyles.caption.copyWith(color: AppColors.infoBlue),
+                      ),
+                    ),
                 ],
               ),
+              if (hospitalConfirmed && preparationNote != null && preparationNote!.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 6, left: 26),
+                  child: Text(preparationNote!, style: AppTextStyles.caption),
+                ),
               const SizedBox(height: 16),
               OutlinedButton.icon(
                 onPressed: onAiReport,
