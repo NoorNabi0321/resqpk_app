@@ -235,6 +235,31 @@ class SOSNotifier extends StateNotifier<SOSState> {
             ),
           );
           break;
+        // v2 — the assigned ambulance handed the case to another driver.
+        case 'driver_changed':
+          final driver = data['driver'] as Map<String, dynamic>?;
+          state = state.copyWith(
+            status: SOSStatus.driverAssigned,
+            activeCase: state.activeCase?.copyWith(
+              status: 'driver_assigned',
+              driverId: driver?['id']?.toString(),
+              driverName: driver?['fullName']?.toString(),
+              driverPhone: driver?['phone']?.toString(),
+              vehicleNumber: driver?['vehicleNumber']?.toString(),
+              driverLat: _toD(driver?['currentLat']),
+              driverLng: _toD(driver?['currentLng']),
+              estimatedDriverArrivalSeconds: data['etaSeconds'] is int
+                  ? data['etaSeconds']
+                  : int.tryParse('${data['etaSeconds']}'),
+            ),
+          );
+          DriverContactStorage.saveDriverContact(
+            name: driver?['fullName']?.toString(),
+            phone: driver?['phone']?.toString(),
+            vehicleNumber: driver?['vehicleNumber']?.toString(),
+            caseId: state.activeCase?.id,
+          );
+          break;
         // v2 — the hospital accepted this patient.
         case 'hospital_accepted':
           state = state.copyWith(
@@ -298,6 +323,36 @@ class SOSNotifier extends StateNotifier<SOSState> {
         estimatedDriverArrivalSeconds: eta.durationSeconds,
       ),
     );
+  }
+
+  /// Rehydrates state for a case that was already running when the app was
+  /// last closed, so tracking resumes instead of starting from scratch.
+  Future<void> restoreActiveCase(EmergencyCaseModel activeCase) async {
+    final statusByName = {
+      'pending': SOSStatus.searching,
+      'searching': SOSStatus.searching,
+      'driver_assigned': SOSStatus.driverAssigned,
+      'arrived': SOSStatus.arrived,
+      'en_route': SOSStatus.enRoute,
+    };
+
+    state = state.copyWith(
+      activeCaseId: activeCase.id,
+      activeCase: activeCase,
+      status: statusByName[activeCase.status] ?? SOSStatus.searching,
+      hospitalDecision: activeCase.hospitalDecision ?? 'awaiting_review',
+      hospitalPreparationNote: activeCase.preparationNote,
+      isLoading: false,
+      clearError: true,
+    );
+
+    try {
+      await _socketService.joinCaseRoom(activeCase.id);
+      _listenToSocketEvents();
+      if (activeCase.driverId != null) _startPatientLocationUpdates();
+    } catch (_) {
+      // Offline restore still shows the case; live updates resume on reconnect.
+    }
   }
 
   // Apply a hospital change locally (called right after PUT /cases/:id/hospital

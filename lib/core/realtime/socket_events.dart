@@ -34,6 +34,14 @@ class SocketEvents {
   static const String caseRedirected = 'case:redirected';
   static const String quickMessage = 'case:quick_message';
 
+  // v2 — driver joins the case room so decisions reach them.
+  static const String driverJoinCase = 'driver:join_case';
+  static const String driverLeaveCase = 'driver:leave_case';
+
+  // v2 — ambulance handed over to another driver.
+  static const String driverChanged = 'emergency:driver_changed';
+  static const String handoffReleased = 'emergency:handoff_released';
+
   // ETA
   static const String etaUpdate = 'eta:update';
 

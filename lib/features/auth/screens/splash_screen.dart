@@ -7,6 +7,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_text_styles.dart';
 import '../../../core/router/app_router.dart';
+import '../../sos/data/sos_repository.dart';
+import '../../sos/providers/sos_provider.dart';
 import '../providers/auth_provider.dart';
 
 class SplashScreen extends ConsumerStatefulWidget {
@@ -35,12 +37,34 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
     if (!mounted) return;
 
     if (auth.isAuthenticated) {
+      // Resume an in-progress emergency rather than dropping the user back on
+      // the home screen — a live case is the whole reason the app is open.
+      final resumed = await _resumeActiveCase(auth.role);
+      if (resumed || !mounted) return;
       context.go(auth.role == 'driver' ? Routes.driverHome : Routes.home);
     } else if (!seenOnboarding) {
       context.go(Routes.onboarding);
     } else {
       context.go(Routes.roleSelect);
     }
+  }
+
+  /// Sends the user straight back to their live case, if they have one.
+  /// Returns true when it navigated.
+  Future<bool> _resumeActiveCase(String? role) async {
+    final activeCase = await SOSRepository().getMyActiveCase();
+    if (activeCase == null || !mounted) return false;
+
+    if (role == 'driver') {
+      context.go(Routes.driverNavigation, extra: activeCase.id);
+      return true;
+    }
+
+    // Patient: rehydrate SOS state, rejoin the case room, then open tracking.
+    await ref.read(sosProvider.notifier).restoreActiveCase(activeCase);
+    if (!mounted) return false;
+    context.go(Routes.tracking);
+    return true;
   }
 
   @override

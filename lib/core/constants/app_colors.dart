@@ -26,3 +26,33 @@ class AppColors {
   // Border
   static const Color borderGlass = Color(0x1AFFFFFF); // rgba(255,255,255,0.10)
 }
+
+/// Light palette for the patient home screen. The rest of the app stays on the
+/// dark system above; this is scoped to the screens that follow the new
+/// light reference design.
+class AppLight {
+  AppLight._();
+
+  static const Color background = Color(0xFFF4F6FA);
+  static const Color card = Color(0xFFFFFFFF);
+  static const Color cardAlt = Color(0xFFF8FAFC);
+  static const Color border = Color(0xFFE8ECF3);
+
+  // Deep navy used by the location banner.
+  static const Color navy = Color(0xFF152238);
+  static const Color navyDeep = Color(0xFF0D1626);
+
+  static const Color red = Color(0xFFE8202F);
+  static const Color redSoft = Color(0xFFFF4757);
+  static const Color green = Color(0xFF16A34A);
+  static const Color greenTint = Color(0xFFE7F8EE);
+  static const Color blue = Color(0xFF2563EB);
+  static const Color blueTint = Color(0xFFEAF1FE);
+  static const Color amber = Color(0xFFF59E0B);
+  static const Color amberTint = Color(0xFFFEF4E2);
+  static const Color tealTint = Color(0xFFE6F7F5);
+
+  static const Color textPrimary = Color(0xFF0F172A);
+  static const Color textSecondary = Color(0xFF64748B);
+  static const Color textFaint = Color(0xFF94A3B8);
+}

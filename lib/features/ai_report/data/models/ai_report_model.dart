@@ -19,6 +19,8 @@ class AIReportModel {
   final int? generationTimeMs;
   final String generationStatus; // 'pending' | 'processing' | 'completed' | 'failed'
   final String? errorMessage;
+  /// Signed URL of the generated PDF (expires ~6h; refresh via the API).
+  final String? pdfUrl;
 
   const AIReportModel({
     this.id,
@@ -37,6 +39,7 @@ class AIReportModel {
     this.generationTimeMs,
     this.generationStatus = 'pending',
     this.errorMessage,
+    this.pdfUrl,
   });
 
   static List<String> _list(dynamic v) {
@@ -67,6 +70,7 @@ class AIReportModel {
       generationTimeMs: _int(j['generation_time_ms'] ?? j['generationTimeMs']),
       generationStatus: (j['generation_status'] ?? j['generationStatus'])?.toString() ?? 'pending',
       errorMessage: (j['error_message'] ?? j['errorMessage'])?.toString(),
+      pdfUrl: (j['pdf_url'] ?? j['pdfUrl'])?.toString(),
     );
   }
 
@@ -106,6 +110,7 @@ class AIReportModel {
     int? generationTimeMs,
     String? generationStatus,
     String? errorMessage,
+    String? pdfUrl,
   }) {
     return AIReportModel(
       id: id ?? this.id,
@@ -124,6 +129,7 @@ class AIReportModel {
       generationTimeMs: generationTimeMs ?? this.generationTimeMs,
       generationStatus: generationStatus ?? this.generationStatus,
       errorMessage: errorMessage ?? this.errorMessage,
+      pdfUrl: pdfUrl ?? this.pdfUrl,
     );
   }
 

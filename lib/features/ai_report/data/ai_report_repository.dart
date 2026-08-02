@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:dio/dio.dart';
 
 import '../../../core/network/api_client.dart';
@@ -75,6 +77,42 @@ class AIReportRepository {
     } on DioException catch (e) {
       if (e.response?.statusCode == 404) return null;
       throw Exception(_err(e));
+    } catch (e) {
+      throw Exception(_err(e));
+    }
+  }
+
+  /// GET /api/ai/report/:caseId/pdf — a freshly signed URL. Stored URLs expire
+  /// after ~6 hours, so always mint a new one before opening the document.
+  Future<String?> getReportPdfUrl(String caseId) async {
+    try {
+      final res = await apiClient.get('/api/ai/report/$caseId/pdf');
+      final data = res['data'];
+      if (data is Map) return data['pdfUrl']?.toString();
+      return null;
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 404) return null;
+      throw Exception(_err(e));
+    } catch (e) {
+      throw Exception(_err(e));
+    }
+  }
+
+  /// Downloads the PDF to a local file so it can be rendered, shared, or saved.
+  Future<File> downloadPdf(String url, String filePath) async {
+    try {
+      final res = await apiClient.dio.get<List<int>>(
+        url,
+        options: Options(
+          responseType: ResponseType.bytes,
+          // The signed URL points at Supabase Storage, not our API — sending
+          // the app's bearer token would be rejected there.
+          headers: {'Authorization': null},
+        ),
+      );
+      final file = File(filePath);
+      await file.writeAsBytes(res.data ?? <int>[]);
+      return file;
     } catch (e) {
       throw Exception(_err(e));
     }

@@ -11,9 +11,27 @@ class AppConstants {
   // Dark street style — detailed enough for navigation, matches the dark UI.
   static const String mapStyle = 'streets-v2-dark';
 
+  // Light basemap for the light-themed patient screens.
+  static const String mapStyleLight = 'streets-v2';
+
   // flutter_map TileLayer urlTemplate ({z}/{x}/{y} are filled in by flutter_map).
+  //
+  // @2x tiles carry the same map area at double resolution, so their labels
+  // are drawn twice as large. Paired with ResQPKMap's tileSize 512 /
+  // zoomOffset -1 this renders street and place names at roughly the size
+  // Google Maps uses, instead of the tiny 256px defaults that were unreadable
+  // even zoomed in.
   static const String mapTileUrl =
+      'https://api.maptiler.com/maps/$mapStyle/{z}/{x}/{y}@2x.png?key=$mapTilerKey';
+
+  // Standard-resolution fallback (used if a device reports low pixel density).
+  static const String mapTileUrlStandard =
       'https://api.maptiler.com/maps/$mapStyle/{z}/{x}/{y}.png?key=$mapTilerKey';
+
+  static const String mapTileUrlLight =
+      'https://api.maptiler.com/maps/$mapStyleLight/{z}/{x}/{y}@2x.png?key=$mapTilerKey';
+  static const String mapTileUrlLightStandard =
+      'https://api.maptiler.com/maps/$mapStyleLight/{z}/{x}/{y}.png?key=$mapTilerKey';
 
   static const String mapAttribution = '© MapTiler © OpenStreetMap contributors';
 

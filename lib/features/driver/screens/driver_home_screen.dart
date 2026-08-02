@@ -9,6 +9,7 @@ import '../../../core/connectivity/connectivity_provider.dart';
 import '../../../core/location/location_provider.dart';
 import '../../../core/realtime/realtime_provider.dart';
 import '../../../core/router/app_router.dart';
+import '../../../core/widgets/back_guard.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../sos/data/models/dispatch_request_model.dart';
 import '../providers/driver_realtime_provider.dart';
@@ -92,7 +93,8 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
     final positionAsync = ref.watch(currentPositionStreamProvider);
     final position = positionAsync.asData?.value ?? driverState.currentPosition;
 
-    return Scaffold(
+    return ExitGuard(
+      child: Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
         child: Padding(
@@ -151,6 +153,7 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
             ],
           ),
         ),
+      ),
       ),
     );
   }

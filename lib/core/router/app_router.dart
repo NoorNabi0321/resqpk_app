@@ -17,10 +17,12 @@ import '../../features/driver/screens/driver_navigation_screen.dart';
 import '../../features/sos/screens/tracking_screen.dart';
 import '../../features/sos/screens/no_driver_screen.dart';
 import '../../features/ai_report/screens/ai_report_screen.dart';
+import '../../features/ai_report/screens/report_pdf_screen.dart';
 import '../../features/offline_sos/screens/offline_sos_screen.dart';
 import '../../features/first_aid/screens/first_aid_screen.dart';
 import '../../features/first_aid/screens/guide_detail_screen.dart';
 import '../../features/first_aid/data/models/first_aid_guide_model.dart';
+import '../../features/ai_report/data/models/ai_report_model.dart';
 import '../../features/profile/screens/profile_screen.dart';
 import '../../features/camps/screens/camps_screen.dart';
 import '../../features/camps/screens/camp_detail_screen.dart';
@@ -47,6 +49,7 @@ class Routes {
   static const String guideDetail = '/first-aid/guide';
   static const String profile = '/profile';
   static const String camps = '/camps';
+  static const String reportPdf = '/ai-report/pdf';
 }
 
 // Routes reachable without being authenticated.
@@ -152,6 +155,16 @@ final appRouter = GoRouter(
     GoRoute(
       path: Routes.aiReport,
       pageBuilder: (c, s) => _page(AIReportScreen(caseId: s.extra as String? ?? '')),
+    ),
+    GoRoute(
+      path: Routes.reportPdf,
+      pageBuilder: (c, s) {
+        final args = s.extra as Map<String, dynamic>? ?? const {};
+        return _page(ReportPdfScreen(
+          caseId: args['caseId']?.toString() ?? '',
+          report: args['report'] as AIReportModel?,
+        ));
+      },
     ),
     GoRoute(
       path: Routes.offlineSos,

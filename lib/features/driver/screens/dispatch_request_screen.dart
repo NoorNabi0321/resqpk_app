@@ -5,8 +5,8 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../../../core/constants/app_colors.dart';
-import '../../../core/constants/app_constants.dart';
 import '../../../core/constants/app_text_styles.dart';
+import '../../../core/map/resqpk_map.dart';
 import '../../sos/data/models/dispatch_request_model.dart';
 import '../../sos/data/sos_repository.dart';
 
@@ -101,22 +101,16 @@ class _DispatchRequestScreenState extends State<DispatchRequestScreen> {
                               const InteractionOptions(flags: InteractiveFlag.none),
                         ),
                         children: [
-                          TileLayer(
-                            urlTemplate: AppConstants.mapTileUrl,
-                            userAgentPackageName: 'com.resqpk.resqpk_app',
-                          ),
+                          const ResQPKTileLayer(),
                           MarkerLayer(
                             markers: [
                               Marker(
                                 point: LatLng(r.patientLat, r.patientLng),
-                                width: 26,
-                                height: 26,
-                                child: Container(
-                                  decoration: BoxDecoration(
-                                    color: AppColors.sosRed,
-                                    shape: BoxShape.circle,
-                                    border: Border.all(color: Colors.white, width: 3),
-                                  ),
+                                width: MapSpec.touchTarget,
+                                height: MapSpec.touchTarget,
+                                child: const UserLocationDot(
+                                  color: AppColors.sosRed,
+                                  showPulse: true,
                                 ),
                               ),
                             ],

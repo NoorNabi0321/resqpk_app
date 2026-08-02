@@ -107,6 +107,32 @@ class SOSRepository {
     }
   }
 
+  // GET /api/cases/active/me → the caller's in-progress case, or null.
+  Future<EmergencyCaseModel?> getMyActiveCase() async {
+    try {
+      final res = await apiClient.get('/api/cases/active/me');
+      final data = res['data'];
+      if (data == null || data is! Map) return null;
+      return EmergencyCaseModel.fromJson(Map<String, dynamic>.from(data));
+    } catch (_) {
+      // Restore is a convenience — never block app startup on it.
+      return null;
+    }
+  }
+
+  // POST /api/cases/handoff → pass the case to another nearby ambulance.
+  Future<Map<String, dynamic>> handoffCase(String caseId, {String? reason}) async {
+    try {
+      final res = await apiClient.post('/api/cases/handoff', data: {
+        'caseId': caseId,
+        if (reason != null && reason.isNotEmpty) 'reason': reason,
+      });
+      return _data(res);
+    } catch (e) {
+      throw Exception(_err(e));
+    }
+  }
+
   // GET /api/decisions/constants → preset messages (cached by the caller).
   Future<List<QuickMessage>> getMessageConstants() async {
     try {

@@ -13,6 +13,7 @@ import '../../../core/router/app_router.dart';
 import '../../first_aid/data/models/first_aid_guide_model.dart';
 import '../../first_aid/providers/first_aid_provider.dart';
 import '../../first_aid/screens/first_aid_screen.dart' show kCategoryEmoji;
+import '../data/models/ai_report_model.dart';
 import '../data/models/recording_state_model.dart';
 import '../providers/ai_report_provider.dart';
 
@@ -46,6 +47,14 @@ class _AIReportScreenState extends ConsumerState<AIReportScreen> {
   Timer? _waveTimer;
   Timer? _elapsedTimer;
   int _elapsedSeconds = 0;
+  bool _openedPdf = false;
+
+  void _openPdf(AIReportModel? report) {
+    context.push(
+      Routes.reportPdf,
+      extra: {'caseId': widget.caseId, 'report': report},
+    );
+  }
 
   @override
   void dispose() {
@@ -109,6 +118,19 @@ class _AIReportScreenState extends ConsumerState<AIReportScreen> {
         _startElapsed();
       } else {
         _stopElapsed();
+      }
+    });
+
+    // The document is the deliverable: once the report completes, open the PDF
+    // straight away. The structured summary stays underneath in the stack.
+    ref.listen(aiReportProvider.select((s) => s.report?.isComplete ?? false),
+        (prev, complete) {
+      if (complete == true && prev != true && !_openedPdf) {
+        _openedPdf = true;
+        final report = ref.read(aiReportProvider).report;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _openPdf(report);
+        });
       }
     });
 
@@ -476,6 +498,22 @@ class _AIReportScreenState extends ConsumerState<AIReportScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          // The PDF is the artefact a hospital and family can actually keep.
+          staggered(
+            SizedBox(
+              height: 52,
+              child: ElevatedButton.icon(
+                onPressed: () => _openPdf(r),
+                icon: const Icon(Icons.picture_as_pdf, color: Colors.white, size: 20),
+                label: Text('View Full PDF Report', style: AppTextStyles.buttonLabel),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.infoBlue,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 14),
           // Header card
           Container(
             padding: const EdgeInsets.all(16),

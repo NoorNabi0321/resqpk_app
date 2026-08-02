@@ -107,6 +107,10 @@ class SocketService {
     socket.on(SocketEvents.caseRedirected, (d) => _emitCaseUpdate('hospital_redirected', d));
     socket.on(SocketEvents.quickMessage, (d) => _emitCaseUpdate('quick_message', d));
 
+    // Ambulance handover.
+    socket.on(SocketEvents.driverChanged, (d) => _emitCaseUpdate('driver_changed', d));
+    socket.on(SocketEvents.handoffReleased, (d) => _emitCaseUpdate('handoff_released', d));
+
     // AI report lifecycle (Module 6).
     socket.on(SocketEvents.aiProcessing, (d) => _aiReportController.add({'event': 'processing', ..._asMap(d)}));
     socket.on(SocketEvents.aiReportReady, (d) => _aiReportController.add({'event': 'report_ready', ..._asMap(d)}));
@@ -160,6 +164,29 @@ class SocketService {
 
   Future<void> emitDriverGoOffline() async {
     _socket?.emitWithAck(SocketEvents.driverGoOffline, {}, ack: (_) {});
+  }
+
+  /// Joins the case room so hospital decisions (accept / redirect / messages),
+  /// which are broadcast per-case, reach this driver.
+  Future<Map<String, dynamic>> driverJoinCase(String caseId) async {
+    _activeCaseId = caseId;
+    final completer = Completer<Map<String, dynamic>>();
+    _socket?.emitWithAck(
+      SocketEvents.driverJoinCase,
+      {'caseId': caseId},
+      ack: (response) {
+        if (!completer.isCompleted) completer.complete(_asMap(response));
+      },
+    );
+    return completer.future.timeout(
+      const Duration(seconds: 10),
+      onTimeout: () => {'success': false, 'error': 'timeout'},
+    );
+  }
+
+  void driverLeaveCase(String caseId) {
+    _socket?.emit(SocketEvents.driverLeaveCase, {'caseId': caseId});
+    _activeCaseId = null;
   }
 
   // --- Patient emits --------------------------------------------------------

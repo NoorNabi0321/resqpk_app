@@ -5,8 +5,8 @@ import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/constants/app_colors.dart';
-import '../../../core/constants/app_constants.dart';
 import '../../../core/constants/app_text_styles.dart';
+import '../../../core/map/resqpk_map.dart';
 import '../data/models/camp_model.dart';
 import '../providers/camps_provider.dart';
 
@@ -126,20 +126,17 @@ class CampDetailScreen extends ConsumerWidget {
                   ),
                 ),
                 children: [
-                  TileLayer(
-                    urlTemplate: AppConstants.mapTileUrl,
-                    userAgentPackageName: 'com.resqpk.resqpk_app',
-                  ),
+                  const ResQPKTileLayer(),
                   MarkerLayer(
                     markers: [
                       Marker(
                         point: LatLng(c.lat, c.lng),
-                        width: 40,
-                        height: 40,
-                        child: const Icon(
-                          Icons.medical_services,
+                        width: MapSpec.touchTarget,
+                        height: MapSpec.pinHeight,
+                        alignment: Alignment.topCenter,
+                        child: const MapDestinationPin(
                           color: AppColors.confirmedGreen,
-                          size: 34,
+                          icon: Icons.medical_services,
                         ),
                       ),
                     ],

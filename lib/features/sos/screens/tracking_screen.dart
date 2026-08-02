@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -10,13 +9,13 @@ import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/constants/app_colors.dart';
-import '../../../core/constants/app_constants.dart';
 import '../../../core/constants/app_text_styles.dart';
+import '../../../core/map/resqpk_map.dart';
 import '../../../core/realtime/realtime_provider.dart';
 import '../../../core/router/app_router.dart';
+import '../../../core/widgets/back_guard.dart';
 import '../../ai_report/data/models/ai_report_model.dart';
 import '../../ai_report/providers/ai_report_provider.dart';
-import '../../ai_report/widgets/first_aid_suggestion_card.dart';
 import '../../first_aid/providers/first_aid_provider.dart';
 import '../data/sos_repository.dart';
 import '../providers/sos_provider.dart';
@@ -41,14 +40,14 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
   Timer? _routeTimer;
   bool _fetchingRoute = false;
 
-  bool _showFirstAidCard = false;
   AIReportModel? _latestReport;
   StreamSubscription<Map<String, dynamic>>? _aiSub;
-
-  // v2 — brief banner when the hospital reroutes the ambulance.
-  String? _hospitalChangeBanner;
-  Timer? _bannerTimer;
   StreamSubscription<Map<String, dynamic>>? _decisionSub;
+
+  /// Everything that has happened on this case, shown in the updates sheet
+  /// instead of stacked over the map where it hid the route.
+  final List<_CaseUpdate> _updates = [];
+  int _unreadUpdates = 0;
 
   @override
   void initState() {
@@ -63,10 +62,14 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
     // Surface first-aid guidance the moment the AI report is ready.
     _aiSub = ref.read(socketServiceProvider).aiReportStream.listen((evt) {
       if (evt['event'] == 'report_ready' && mounted) {
-        setState(() {
-          _latestReport = AIReportModel.fromJson(evt);
-          _showFirstAidCard = true;
-        });
+        final report = AIReportModel.fromJson(evt);
+        setState(() => _latestReport = report);
+        _addUpdate(_CaseUpdate(
+          kind: _UpdateKind.report,
+          title: 'Emergency report ready',
+          body: report.firstAidSuggestion ?? 'Your AI emergency report has been generated.',
+          at: DateTime.now(),
+        ));
       }
     });
 
@@ -77,17 +80,67 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
     // A redirect changes the destination — reassure the patient without
     // surfacing the clinical reason, which is for the driver and records only.
     _decisionSub = ref.read(socketServiceProvider).caseUpdateStream.listen((data) {
-      if (data['event'] != 'hospital_redirected' || !mounted) return;
-      final newHospital = data['newHospital'] as Map<String, dynamic>?;
-      final name = newHospital?['name']?.toString() ?? 'another hospital';
-      setState(() {
-        _hospitalChangeBanner = 'Hospital changed to $name for better care availability.';
-      });
-      _fetchRoute();
-      _bannerTimer?.cancel();
-      _bannerTimer = Timer(const Duration(seconds: 6), () {
-        if (mounted) setState(() => _hospitalChangeBanner = null);
-      });
+      if (!mounted) return;
+      final event = data['event']?.toString();
+
+      switch (event) {
+        case 'driver_assigned':
+          _addUpdate(_CaseUpdate(
+            kind: _UpdateKind.hospital,
+            title: 'Ambulance on the way',
+            body: 'The hospital is reviewing your case.',
+            at: DateTime.now(),
+          ));
+          break;
+
+        case 'hospital_accepted':
+          final note = data['preparationNote']?.toString();
+          _addUpdate(_CaseUpdate(
+            kind: _UpdateKind.accepted,
+            title: '${data['hospitalName'] ?? 'The hospital'} confirmed',
+            body: note != null && note.isNotEmpty
+                ? 'They are ready for you — $note.'
+                : 'They are expecting you and preparing for your arrival.',
+            at: DateTime.now(),
+          ));
+          break;
+
+        case 'hospital_redirected':
+          final newHospital = data['newHospital'] as Map<String, dynamic>?;
+          final name = newHospital?['name']?.toString() ?? 'another hospital';
+          _addUpdate(_CaseUpdate(
+            kind: _UpdateKind.hospital,
+            // The clinical reason stays with the driver and the records.
+            title: 'Hospital changed to $name',
+            body: 'You are being taken here for better care availability.',
+            at: DateTime.now(),
+          ));
+          _fetchRoute();
+          break;
+
+        case 'driver_changed':
+          final driver = data['driver'] as Map<String, dynamic>?;
+          final name = driver?['fullName']?.toString() ?? 'another driver';
+          _addUpdate(_CaseUpdate(
+            kind: _UpdateKind.driver,
+            title: 'A closer ambulance is coming',
+            body: '$name has taken over and is on the way to you.',
+            at: DateTime.now(),
+          ));
+          _fetchRoute();
+          break;
+
+        default:
+          break;
+      }
+    });
+  }
+
+  void _addUpdate(_CaseUpdate update) {
+    if (!mounted) return;
+    setState(() {
+      _updates.insert(0, update);
+      _unreadUpdates += 1;
     });
   }
 
@@ -115,6 +168,77 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
     } finally {
       _fetchingRoute = false;
     }
+  }
+
+  void _openUpdatesSheet(String caseId) {
+    setState(() => _unreadUpdates = 0);
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: AppColors.surfaceOne,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetCtx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text('Updates', style: AppTextStyles.subtitle),
+              const SizedBox(height: 4),
+              Text('Everything happening with your emergency',
+                  style: AppTextStyles.caption),
+              const SizedBox(height: 16),
+              if (_updates.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 28),
+                  child: Text(
+                    'No updates yet. You will see hospital and ambulance news here.',
+                    textAlign: TextAlign.center,
+                    style: AppTextStyles.caption,
+                  ),
+                )
+              else
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 380),
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    itemCount: _updates.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 10),
+                    itemBuilder: (_, i) => _UpdateTile(
+                      update: _updates[i],
+                      onViewReport: _updates[i].kind == _UpdateKind.report
+                          ? () {
+                              Navigator.of(sheetCtx).pop();
+                              context.push(Routes.reportPdf, extra: {
+                                'caseId': caseId,
+                                'report': _latestReport,
+                              });
+                            }
+                          : null,
+                      onSeeGuide: _updates[i].kind == _UpdateKind.report
+                          ? () {
+                              Navigator.of(sheetCtx).pop();
+                              final relevant = ref
+                                  .read(firstAidProvider.notifier)
+                                  .getRelevantGuidesForEmergency(
+                                      _latestReport?.emergencyType ?? '');
+                              if (relevant.isNotEmpty) {
+                                context.push(Routes.guideDetail, extra: relevant.first);
+                              } else {
+                                context.push(Routes.firstAid);
+                              }
+                            }
+                          : null,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _openChangeHospitalSheet() async {
@@ -220,7 +344,6 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
     _aiSub?.cancel();
     _decisionSub?.cancel();
     _routeTimer?.cancel();
-    _bannerTimer?.cancel();
     super.dispose();
   }
 
@@ -328,7 +451,11 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
         ? (1 - eta / _originalEtaSeconds!).clamp(0.0, 1.0)
         : 0.0;
 
-    return Scaffold(
+    // Back returns to home; the case stays active and tracking is reachable
+    // again from there (and on next app launch via session restore).
+    return BackTo(
+      onBack: () => context.go(Routes.home),
+      child: Scaffold(
       backgroundColor: AppColors.background,
       body: Stack(
         children: [
@@ -336,56 +463,52 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
             mapController: _mapController,
             options: MapOptions(initialCenter: driver ?? patient, initialZoom: 14),
             children: [
-              TileLayer(
-                urlTemplate: AppConstants.mapTileUrl,
-                userAgentPackageName: 'com.resqpk.resqpk_app',
-              ),
+              const ResQPKTileLayer(),
               PolylineLayer(
                 polylines: [
                   // Road-following route for the current leg (pickup = blue
                   // driver→patient; dropoff = green →hospital). Falls back to a
                   // straight line only while the road route hasn't loaded yet.
                   if (_routePoints.length >= 2)
-                    Polyline(
-                      points: _routePoints,
+                    ...routePolyline(
+                      _routePoints,
                       color: _routeLeg == 'dropoff'
                           ? AppColors.confirmedGreen
                           : AppColors.infoBlue,
-                      strokeWidth: 5,
                     )
                   else if (_routeLeg != 'dropoff' && driver != null)
-                    Polyline(points: [driver, patient], color: AppColors.infoBlue, strokeWidth: 4)
+                    ...routePolyline([driver, patient],
+                        color: AppColors.infoBlue, isAlternate: true)
                   else if (_routeLeg == 'dropoff' && hospital != null)
-                    Polyline(
-                      points: [patient, hospital],
-                      color: AppColors.confirmedGreen.withValues(alpha: 0.7),
-                      strokeWidth: 4,
-                    ),
+                    ...routePolyline([patient, hospital],
+                        color: AppColors.confirmedGreen, isAlternate: true),
                 ],
               ),
               MarkerLayer(
                 markers: [
                   Marker(
                     point: patient,
-                    width: 24,
-                    height: 24,
-                    child: const _Dot(color: AppColors.sosRed),
+                    width: MapSpec.touchTarget,
+                    height: MapSpec.touchTarget,
+                    child: const UserLocationDot(color: AppColors.sosRed),
                   ),
                   if (hospital != null)
                     Marker(
                       point: hospital,
-                      width: 34,
-                      height: 34,
-                      child: const Icon(Icons.local_hospital, color: AppColors.confirmedGreen, size: 30),
+                      width: MapSpec.touchTarget,
+                      height: MapSpec.pinHeight,
+                      alignment: Alignment.topCenter,
+                      child: const MapDestinationPin(color: AppColors.confirmedGreen),
                     ),
                   if (driver != null)
                     Marker(
                       point: driver,
-                      width: 44,
-                      height: 44,
-                      child: Transform.rotate(
-                        angle: _driverHeading * math.pi / 180,
-                        child: const _AmbulancePin(),
+                      width: MapSpec.touchTarget,
+                      height: MapSpec.touchTarget,
+                      child: NavigationPuck(
+                        headingDegrees: _driverHeading,
+                        color: AppColors.infoBlue,
+                        icon: Icons.navigation,
                       ),
                     ),
                 ],
@@ -394,10 +517,19 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
           ),
           SafeArea(
             child: Align(
-              alignment: Alignment.topLeft,
+              alignment: Alignment.topCenter,
               child: Padding(
                 padding: const EdgeInsets.all(12),
-                child: _StatusPill(status: ref.watch(sosProvider).status),
+                child: Row(
+                  children: [
+                    _StatusPill(status: ref.watch(sosProvider).status),
+                    const Spacer(),
+                    _UpdatesButton(
+                      unread: _unreadUpdates,
+                      onTap: () => _openUpdatesSheet(c.id),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -406,50 +538,6 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                if (_hospitalChangeBanner != null)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                      decoration: BoxDecoration(
-                        color: AppColors.infoBlue.withValues(alpha: 0.16),
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: AppColors.infoBlue.withValues(alpha: 0.5)),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.info_outline, color: AppColors.infoBlue, size: 18),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Text(
-                              _hospitalChangeBanner!,
-                              style: AppTextStyles.caption.copyWith(color: AppColors.textPrimary),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                if (_showFirstAidCard && _latestReport?.firstAidSuggestion != null)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-                    child: FirstAidSuggestionCard(
-                      suggestion: _latestReport!.firstAidSuggestion!,
-                      urgencyLevel: _latestReport!.urgencyLevel ?? 'unknown',
-                      onViewFullReport: () => context.push(Routes.aiReport, extra: c.id),
-                      onSeeGuide: () {
-                        final relevant = ref
-                            .read(firstAidProvider.notifier)
-                            .getRelevantGuidesForEmergency(_latestReport!.emergencyType ?? '');
-                        if (relevant.isNotEmpty) {
-                          context.push(Routes.guideDetail, extra: relevant.first);
-                        } else {
-                          context.push(Routes.firstAid);
-                        }
-                      },
-                      onDismiss: () => setState(() => _showFirstAidCard = false),
-                    ),
-                  ),
                 _StatusCard(
                   driverName: c.driverName ?? 'Driver',
                   vehicleNumber: c.vehicleNumber ?? '',
@@ -459,7 +547,18 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
                   hasReport: _latestReport != null ||
                       (ref.watch(aiReportProvider).report?.isComplete ?? false),
                   onCallDriver: () => _call(c.driverPhone),
-                  onAiReport: () => context.push(Routes.aiReport, extra: c.id),
+                  // With a report in hand the document is what they want to
+                  // see; otherwise take them to the generation screen.
+                  onAiReport: () {
+                    final existing =
+                        _latestReport ?? ref.read(aiReportProvider).report;
+                    if (existing != null && existing.isComplete) {
+                      context.push(Routes.reportPdf,
+                          extra: {'caseId': c.id, 'report': existing});
+                    } else {
+                      context.push(Routes.aiReport, extra: c.id);
+                    }
+                  },
                   onCancel: _confirmCancel,
                   onChangeHospital: _openChangeHospitalSheet,
                   hospitalConfirmed: ref.watch(sosProvider).isHospitalConfirmed,
@@ -469,6 +568,7 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
             ),
           ),
         ],
+      ),
       ),
     );
   }
@@ -481,32 +581,162 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
   }
 }
 
-class _Dot extends StatelessWidget {
-  final Color color;
-  const _Dot({required this.color});
+enum _UpdateKind { hospital, accepted, driver, report }
+
+class _CaseUpdate {
+  final _UpdateKind kind;
+  final String title;
+  final String body;
+  final DateTime at;
+
+  const _CaseUpdate({
+    required this.kind,
+    required this.title,
+    required this.body,
+    required this.at,
+  });
+}
+
+/// Bell-style button beside the EMERGENCY ACTIVE pill. Replaces the panel that
+/// used to sit over the map and cover the route.
+class _UpdatesButton extends StatelessWidget {
+  final int unread;
+  final VoidCallback onTap;
+
+  const _UpdatesButton({required this.unread, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: color,
-        shape: BoxShape.circle,
-        border: Border.all(color: Colors.white, width: 3),
-        boxShadow: const [BoxShadow(color: AppColors.sosGlow, blurRadius: 12)],
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 44,
+        height: 44,
+        decoration: BoxDecoration(
+          color: AppColors.surfaceTwo,
+          shape: BoxShape.circle,
+          border: Border.all(color: AppColors.borderGlass),
+        ),
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            const Icon(Icons.notifications_none, color: AppColors.textPrimary, size: 21),
+            if (unread > 0)
+              Positioned(
+                top: 8,
+                right: 9,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                  decoration: BoxDecoration(
+                    color: AppColors.sosRed,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    unread > 9 ? '9+' : '$unread',
+                    style: AppTextStyles.caption.copyWith(
+                      color: Colors.white,
+                      fontSize: 9,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
 }
 
-class _AmbulancePin extends StatelessWidget {
-  const _AmbulancePin();
+class _UpdateTile extends StatelessWidget {
+  final _CaseUpdate update;
+  final VoidCallback? onViewReport;
+  final VoidCallback? onSeeGuide;
+
+  const _UpdateTile({required this.update, this.onViewReport, this.onSeeGuide});
+
+  ({IconData icon, Color color}) get _style {
+    switch (update.kind) {
+      case _UpdateKind.accepted:
+        return (icon: Icons.check_circle, color: AppColors.confirmedGreen);
+      case _UpdateKind.hospital:
+        return (icon: Icons.local_hospital, color: AppColors.infoBlue);
+      case _UpdateKind.driver:
+        return (icon: Icons.local_shipping, color: AppColors.infoBlue);
+      case _UpdateKind.report:
+        return (icon: Icons.description, color: AppColors.warningAmber);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    final s = _style;
     return Container(
-      decoration: const BoxDecoration(color: AppColors.infoBlue, shape: BoxShape.circle),
-      padding: const EdgeInsets.all(8),
-      child: const Icon(Icons.airport_shuttle, color: Colors.white, size: 22),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceTwo,
+        borderRadius: BorderRadius.circular(14),
+        border: Border(left: BorderSide(color: s.color, width: 3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(s.icon, color: s.color, size: 18),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(update.title,
+                        style: AppTextStyles.body.copyWith(fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 2),
+                    Text(update.body, style: AppTextStyles.caption),
+                  ],
+                ),
+              ),
+              Text(
+                TimeOfDay.fromDateTime(update.at).format(context),
+                style: AppTextStyles.caption,
+              ),
+            ],
+          ),
+          if (onViewReport != null || onSeeGuide != null) ...[
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                if (onViewReport != null)
+                  TextButton.icon(
+                    onPressed: onViewReport,
+                    icon: const Icon(Icons.picture_as_pdf, size: 15, color: AppColors.infoBlue),
+                    label: Text('View Report',
+                        style: AppTextStyles.caption.copyWith(color: AppColors.infoBlue)),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      minimumSize: const Size(0, 32),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                  ),
+                if (onSeeGuide != null)
+                  TextButton.icon(
+                    onPressed: onSeeGuide,
+                    icon: const Icon(Icons.medical_information,
+                        size: 15, color: AppColors.confirmedGreen),
+                    label: Text('First Aid Guide',
+                        style: AppTextStyles.caption.copyWith(color: AppColors.confirmedGreen)),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      minimumSize: const Size(0, 32),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                  ),
+              ],
+            ),
+          ],
+        ],
+      ),
     );
   }
 }

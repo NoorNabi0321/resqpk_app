@@ -85,6 +85,8 @@ dependencies:
   jwt_decoder: ^2.0.1                # Decode JWT tokens locally
   flutter_secure_storage: ^9.0.0     # Store token securely
   socket_io_client: ^2.0.3+1         # Real-time WebSocket
+  flutter_pdfview: ^1.4.4
+  flutter_file_dialog: ^3.0.3
 
 dev_dependencies:
   flutter_test:

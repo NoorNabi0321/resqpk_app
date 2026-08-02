@@ -10,11 +10,12 @@ import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/constants/app_colors.dart';
-import '../../../core/constants/app_constants.dart';
 import '../../../core/constants/app_text_styles.dart';
+import '../../../core/map/resqpk_map.dart';
 import '../../../core/location/location_provider.dart';
 import '../../../core/realtime/realtime_provider.dart';
 import '../../../core/router/app_router.dart';
+import '../../../core/widgets/back_guard.dart';
 import '../../sos/data/models/emergency_case_model.dart';
 import '../../sos/data/models/quick_message_model.dart';
 import '../../sos/data/sos_repository.dart';
@@ -70,6 +71,10 @@ class _DriverNavigationScreenState extends ConsumerState<DriverNavigationScreen>
 
     _loadMessages();
 
+    // Hospital decisions are broadcast to the case room, so join it — without
+    // this the driver only ever sees the original dispatch.
+    ref.read(socketServiceProvider).driverJoinCase(widget.caseId);
+
     _caseEvtSub = ref.read(socketServiceProvider).caseUpdateStream.listen(_onCaseEvent);
   }
 
@@ -96,6 +101,19 @@ class _DriverNavigationScreenState extends ConsumerState<DriverNavigationScreen>
 
       case 'hospital_redirected':
         _showRedirectAlert(data);
+        break;
+
+      // Another driver took over — this screen is no longer ours.
+      case 'handoff_released':
+        ref.read(driverLocationBroadcasterProvider).updateActiveCaseId(null);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Case handed over to ${data['newDriverName'] ?? 'another driver'}',
+            ),
+          ),
+        );
+        context.go(Routes.driverHome);
         break;
 
       case 'quick_message':
@@ -125,23 +143,34 @@ class _DriverNavigationScreenState extends ConsumerState<DriverNavigationScreen>
     }
   }
 
+  // Loaded independently: if the presets fail the history should still show,
+  // and vice versa. A single Future.wait would lose both on one failure.
   Future<void> _loadMessages() async {
     try {
-      final results = await Future.wait([
-        _repo.getMessageConstants(),
-        _repo.getCaseMessages(widget.caseId),
-      ]);
+      final presets = await _repo.getMessageConstants();
+      if (mounted) {
+        setState(() {
+          _driverMessages = presets.where((m) => m.role == 'driver').toList();
+        });
+      }
+    } catch (e) {
+      debugPrint('Quick message presets unavailable: $e');
+    }
+
+    await _refreshMessageLog();
+  }
+
+  Future<void> _refreshMessageLog() async {
+    try {
+      final log = await _repo.getCaseMessages(widget.caseId);
       if (!mounted) return;
       setState(() {
-        _driverMessages = (results[0] as List<QuickMessage>)
-            .where((m) => m.role == 'driver')
-            .toList();
         _messageLog
           ..clear()
-          ..addAll(results[1] as List<CaseMessage>);
+          ..addAll(log);
       });
-    } catch (_) {
-      // Messaging is a convenience — never block navigation on it.
+    } catch (e) {
+      debugPrint('Message history unavailable: $e');
     }
   }
 
@@ -168,6 +197,9 @@ class _DriverNavigationScreenState extends ConsumerState<DriverNavigationScreen>
 
   void _openMessageLog() {
     setState(() => _unreadMessages = 0);
+    // Pull the latest history each time — messages sent while the app was
+    // backgrounded would otherwise be missing from the feed.
+    _refreshMessageLog();
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: AppColors.surfaceOne,
@@ -230,6 +262,129 @@ class _DriverNavigationScreenState extends ConsumerState<DriverNavigationScreen>
         ),
       ),
     );
+  }
+
+  // Hand the case to another nearby ambulance (breakdown, gridlock, etc.).
+  Future<void> _confirmHandoff() async {
+    final reasons = [
+      'Stuck in heavy traffic',
+      'Vehicle breakdown',
+      'Too far to reach in time',
+      'Other emergency',
+    ];
+    String? chosen;
+
+    final confirmed = await showModalBottomSheet<bool>(
+      context: context,
+      backgroundColor: AppColors.surfaceOne,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetCtx) => StatefulBuilder(
+        builder: (sheetCtx, setSheetState) => SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text('Hand over this case', style: AppTextStyles.subtitle),
+                const SizedBox(height: 6),
+                Text(
+                  'The nearest available ambulance will take over. The patient '
+                  'and hospital are told immediately.',
+                  style: AppTextStyles.caption,
+                ),
+                const SizedBox(height: 16),
+                Text('Reason', style: AppTextStyles.caption),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: reasons
+                      .map(
+                        (r) => GestureDetector(
+                          onTap: () => setSheetState(() => chosen = r),
+                          child: Container(
+                            padding:
+                                const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: chosen == r
+                                  ? AppColors.warningAmber.withValues(alpha: 0.2)
+                                  : AppColors.surfaceTwo,
+                              borderRadius: BorderRadius.circular(999),
+                              border: Border.all(
+                                color: chosen == r
+                                    ? AppColors.warningAmber
+                                    : AppColors.borderGlass,
+                              ),
+                            ),
+                            child: Text(
+                              r,
+                              style: AppTextStyles.caption.copyWith(
+                                color: chosen == r
+                                    ? AppColors.warningAmber
+                                    : AppColors.textSecondary,
+                              ),
+                            ),
+                          ),
+                        ),
+                      )
+                      .toList(),
+                ),
+                const SizedBox(height: 20),
+                SizedBox(
+                  height: 52,
+                  child: ElevatedButton(
+                    onPressed: chosen == null
+                        ? null
+                        : () => Navigator.of(sheetCtx).pop(true),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.warningAmber,
+                      disabledBackgroundColor: AppColors.surfaceThree,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(26),
+                      ),
+                    ),
+                    child: Text('Find another ambulance',
+                        style: AppTextStyles.buttonLabel),
+                  ),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.of(sheetCtx).pop(false),
+                  child: Text('Keep this case', style: AppTextStyles.caption),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _busy = true);
+    try {
+      final result = await _repo.handoffCase(widget.caseId, reason: chosen);
+      if (!mounted) return;
+      final newDriver = result['driver'] as Map<String, dynamic>?;
+      ref.read(driverLocationBroadcasterProvider).updateActiveCaseId(null);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Handed over to ${newDriver?['fullName'] ?? 'another driver'}',
+          ),
+        ),
+      );
+      context.go(Routes.driverHome);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _busy = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+      );
+    }
   }
 
   // A redirect changes where this ambulance is going — it must be acknowledged,
@@ -462,7 +617,11 @@ class _DriverNavigationScreenState extends ConsumerState<DriverNavigationScreen>
 
     final action = _nextAction();
 
-    return Scaffold(
+    // Back returns to the driver home; the case stays assigned and can be
+    // reopened from there or on the next app launch.
+    return BackTo(
+      onBack: () => context.go(Routes.driverHome),
+      child: Scaffold(
       backgroundColor: AppColors.background,
       body: Stack(
         children: [
@@ -470,41 +629,37 @@ class _DriverNavigationScreenState extends ConsumerState<DriverNavigationScreen>
             mapController: _mapController,
             options: MapOptions(initialCenter: driver ?? target ?? const LatLng(25.3792, 68.3683), initialZoom: 14),
             children: [
-              TileLayer(
-                urlTemplate: AppConstants.mapTileUrl,
-                userAgentPackageName: 'com.resqpk.resqpk_app',
-              ),
+              const ResQPKTileLayer(),
               PolylineLayer(polylines: [
                 if (_routePoints.length >= 2)
-                  Polyline(
-                    points: _routePoints,
+                  ...routePolyline(
+                    _routePoints,
                     color: goingToHospital ? AppColors.confirmedGreen : AppColors.infoBlue,
-                    strokeWidth: 5,
                   )
                 else if (driver != null && target != null)
-                  Polyline(points: [driver, target], color: AppColors.infoBlue, strokeWidth: 4),
+                  ...routePolyline([driver, target],
+                      color: AppColors.infoBlue, isAlternate: true),
               ]),
               MarkerLayer(markers: [
                 if (target != null)
                   Marker(
                     point: target,
-                    width: 34,
-                    height: 34,
-                    child: Icon(
-                      goingToHospital ? Icons.local_hospital : Icons.location_on,
+                    width: MapSpec.touchTarget,
+                    height: MapSpec.pinHeight,
+                    alignment: Alignment.topCenter,
+                    child: MapDestinationPin(
                       color: goingToHospital ? AppColors.confirmedGreen : AppColors.sosRed,
-                      size: 32,
+                      icon: goingToHospital ? Icons.local_hospital : Icons.person_pin_circle,
                     ),
                   ),
                 if (driver != null)
                   Marker(
                     point: driver,
-                    width: 40,
-                    height: 40,
-                    child: Container(
-                      decoration: const BoxDecoration(color: AppColors.infoBlue, shape: BoxShape.circle),
-                      padding: const EdgeInsets.all(8),
-                      child: const Icon(Icons.airport_shuttle, color: Colors.white, size: 20),
+                    width: MapSpec.touchTarget,
+                    height: MapSpec.touchTarget,
+                    child: const NavigationPuck(
+                      color: AppColors.infoBlue,
+                      icon: Icons.navigation,
                     ),
                   ),
               ]),
@@ -516,6 +671,13 @@ class _DriverNavigationScreenState extends ConsumerState<DriverNavigationScreen>
                 Row(
                   children: [
                     const SizedBox(width: 12),
+                    // Back to the driver home; the case stays assigned and the
+                    // driver can reopen it from there.
+                    _RoundIconButton(
+                      icon: Icons.arrow_back,
+                      onTap: () => context.go(Routes.driverHome),
+                    ),
+                    const SizedBox(width: 8),
                     Expanded(
                       child: Container(
                         margin: const EdgeInsets.symmetric(vertical: 12),
@@ -533,6 +695,13 @@ class _DriverNavigationScreenState extends ConsumerState<DriverNavigationScreen>
                       ),
                     ),
                     _MessageLogButton(unread: _unreadMessages, onTap: _openMessageLog),
+                    const SizedBox(width: 8),
+                    if (_status == 'driver_assigned' || _status == 'arrived')
+                      _RoundIconButton(
+                        icon: Icons.swap_horiz,
+                        tint: AppColors.warningAmber,
+                        onTap: _busy ? null : _confirmHandoff,
+                      ),
                     const SizedBox(width: 12),
                   ],
                 ),
@@ -561,6 +730,7 @@ class _DriverNavigationScreenState extends ConsumerState<DriverNavigationScreen>
             ),
           ),
         ],
+      ),
       ),
     );
   }
@@ -607,6 +777,36 @@ class _HospitalDecisionBanner extends StatelessWidget {
         style: AppTextStyles.caption.copyWith(
           color: accepted ? Colors.white : AppColors.textSecondary,
           fontWeight: accepted ? FontWeight.bold : FontWeight.normal,
+        ),
+      ),
+    );
+  }
+}
+
+/// Circular translucent button used for the top-bar controls.
+class _RoundIconButton extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback? onTap;
+  final Color? tint;
+
+  const _RoundIconButton({required this.icon, required this.onTap, this.tint});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 44,
+        height: 44,
+        decoration: BoxDecoration(
+          color: AppColors.surfaceTwo,
+          shape: BoxShape.circle,
+          border: Border.all(color: tint ?? AppColors.borderGlass),
+        ),
+        child: Icon(
+          icon,
+          color: onTap == null ? AppColors.textSecondary : (tint ?? AppColors.textSecondary),
+          size: 20,
         ),
       ),
     );
