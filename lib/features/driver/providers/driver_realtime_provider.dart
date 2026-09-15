@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 
@@ -53,8 +56,49 @@ class DriverOnlineNotifier extends StateNotifier<DriverOnlineState> {
   final DriverLocationBroadcaster _broadcaster;
   final LocationService _locationService;
 
+  StreamSubscription<bool>? _readySubscription;
+  bool _wasReady = false;
+  bool _restoring = false;
+
   DriverOnlineNotifier(this._socketService, this._broadcaster, this._locationService)
-      : super(const DriverOnlineState());
+      : super(const DriverOnlineState()) {
+    // The server marks a driver unavailable the moment their socket drops. The
+    // socket reconnects by itself, but until go_online is sent again dispatch
+    // skips this driver while the app still shows Online.
+    _readySubscription = _socketService.readyStream.listen((ready) {
+      final reconnected = ready && !_wasReady;
+      _wasReady = ready;
+      if (reconnected && state.isOnline) _restoreOnline();
+    });
+  }
+
+  Future<void> _restoreOnline() async {
+    if (_restoring) return;
+    _restoring = true;
+    try {
+      final position =
+          _locationService.lastPosition ?? await _locationService.getCurrentPosition();
+      if (position == null || !state.isOnline) return;
+      final res = await _socketService.emitDriverGoOnline(
+        position.latitude,
+        position.longitude,
+        position.heading,
+      );
+      if (res['success'] != true) {
+        debugPrint('Re-sending go_online after reconnect failed: ${res['error']}');
+      }
+    } catch (e) {
+      debugPrint('Re-sending go_online after reconnect failed: $e');
+    } finally {
+      _restoring = false;
+    }
+  }
+
+  @override
+  void dispose() {
+    _readySubscription?.cancel();
+    super.dispose();
+  }
 
   Future<void> goOnline() async {
     state = state.copyWith(isLoading: true, clearError: true);
