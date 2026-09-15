@@ -30,7 +30,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         [Color(0xFFFF2D3B), Color(0xFF7A1020)]),
     _OnboardingPage('We Notify First', 'Hospitals receive your details before the ambulance arrives.',
         [Color(0xFF3B82F6), Color(0xFF11233F)]),
-    _OnboardingPage('Works Offline', 'No internet? A missed call still triggers the emergency response.',
+    _OnboardingPage('Your Hospital, Your Choice', 'Confirm the nearest hospital or pick another — only that hospital is alerted.',
         [Color(0xFF00D68F), Color(0xFF0C3A2C)]),
   ];
 

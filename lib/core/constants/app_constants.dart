@@ -1,5 +1,4 @@
-/// App-wide constants. Extended in later modules (e.g. gateway/emergency
-/// numbers in Module 7).
+/// App-wide constants.
 class AppConstants {
   AppConstants._();
 
@@ -35,19 +34,5 @@ class AppConstants {
 
   static const String mapAttribution = '© MapTiler © OpenStreetMap contributors';
 
-  // --- Offline SOS (Module 7) ----------------------------------------------
-  // The ResQPK gateway SIM running the "SMS to URL Forwarder" app. Patients
-  // SMS the keyword here when offline.
-  static const String gatewayPhoneNumber = '+923133394113';
-  static const String sosKeyword = 'SOS';
-
   static const String appVersion = '1.0.0-fyp';
-
-  // Pakistani emergency services (fallback dialer rows on the offline screen).
-  static const List<Map<String, String>> emergencyServices = [
-    {'name': 'Rescue 1122', 'number': '1122', 'icon': '🚑'},
-    {'name': 'Edhi Foundation', 'number': '115', 'icon': '🏥'},
-    {'name': 'Chhipa Welfare', 'number': '1020', 'icon': '🩺'},
-    {'name': 'Police Emergency', 'number': '15', 'icon': '👮'},
-  ];
 }

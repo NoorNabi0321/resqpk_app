@@ -123,7 +123,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                     const SizedBox(height: 14),
                     _SosBanner(state: sos, pulse: _pulseController),
                     const SizedBox(height: 14),
-                    _CampsAndSmsRow(isOnline: isOnline),
+                    const _CampsCard(),
                     const SizedBox(height: 14),
                     const _QuickActions(),
                   ],
@@ -896,157 +896,93 @@ class _SosBanner extends ConsumerWidget {
   }
 }
 
-// --- Camps + SMS row ---------------------------------------------------------
+// --- Nearby camps ------------------------------------------------------------
 
-class _CampsAndSmsRow extends ConsumerWidget {
-  final bool isOnline;
-  const _CampsAndSmsRow({required this.isOnline});
+class _CampsCard extends ConsumerWidget {
+  const _CampsCard();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final camps = ref.watch(nearbyCampsProvider).asData?.value ?? const [];
 
-    return IntrinsicHeight(
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Expanded(
-            child: _SectionCard(
-              title: 'Nearby Medical Camps',
-              titleSize: 13.5,
-              trailing: camps.isEmpty
-                  ? null
-                  : GestureDetector(
-                      onTap: () => context.push(Routes.camps),
-                      child: Text(
-                        'View all',
-                        style: TextStyle(
-                          color: AppLight.blue,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-              child: camps.isEmpty
-                  ? Text(
-                      'No camps running near you.',
-                      style: TextStyle(fontSize: 12, color: AppLight.textSecondary),
-                    )
-                  : GestureDetector(
-                      onTap: () => context.push(Routes.camps),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 40,
-                            height: 40,
-                            decoration: BoxDecoration(
-                              color: AppLight.greenTint,
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Icon(Icons.medical_services,
-                                color: AppLight.green, size: 20),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  camps.first.name,
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    fontSize: 12.5,
-                                    fontWeight: FontWeight.w700,
-                                    color: AppLight.textPrimary,
-                                    height: 1.25,
-                                  ),
-                                ),
-                                const SizedBox(height: 3),
-                                Row(
-                                  children: [
-                                    Text(
-                                      camps.first.distanceText ?? '',
-                                      style: TextStyle(
-                                          fontSize: 11, color: AppLight.textSecondary),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Container(
-                                      width: 6,
-                                      height: 6,
-                                      decoration: BoxDecoration(
-                                        color: AppLight.green,
-                                        shape: BoxShape.circle,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      'Ongoing',
-                                      style: TextStyle(
-                                          fontSize: 11, color: AppLight.green),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: _SectionCard(
-              title: 'Offline SMS SOS',
-              titleSize: 13.5,
-              trailing: Icon(
-                isOnline ? Icons.signal_cellular_alt : Icons.signal_cellular_off,
-                size: 17,
-                color: isOnline ? AppLight.textFaint : AppLight.red,
-              ),
-              child: GestureDetector(
-                onTap: () => context.push(Routes.offlineSos),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: AppLight.blueTint,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Icon(Icons.sms, color: AppLight.blue, size: 20),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Send SOS via SMS\n(Works Offline)',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                              color: AppLight.textPrimary,
-                              height: 1.25,
-                            ),
-                          ),
-                          const SizedBox(height: 3),
-                          Text(
-                            'Works without internet',
-                            style: TextStyle(fontSize: 11, color: AppLight.textSecondary),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
+    return _SectionCard(
+      title: 'Nearby Medical Camps',
+      trailing: camps.isEmpty
+          ? null
+          : GestureDetector(
+              onTap: () => context.push(Routes.camps),
+              child: Text(
+                'View all',
+                style: TextStyle(
+                  color: AppLight.blue,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             ),
-          ),
-        ],
-      ),
+      child: camps.isEmpty
+          ? Text(
+              'No camps running near you.',
+              style: TextStyle(fontSize: 12.5, color: AppLight.textSecondary),
+            )
+          : GestureDetector(
+              onTap: () => context.push(Routes.camps),
+              child: Row(
+                children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: AppLight.greenTint,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(Icons.medical_services, color: AppLight.green, size: 20),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          camps.first.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.w700,
+                            color: AppLight.textPrimary,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Row(
+                          children: [
+                            Text(
+                              camps.first.distanceText ?? '',
+                              style: TextStyle(fontSize: 11.5, color: AppLight.textSecondary),
+                            ),
+                            const SizedBox(width: 8),
+                            Container(
+                              width: 6,
+                              height: 6,
+                              decoration: BoxDecoration(
+                                color: AppLight.green,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              'Ongoing',
+                              style: TextStyle(fontSize: 11.5, color: AppLight.green),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  Icon(Icons.chevron_right, color: AppLight.textFaint, size: 20),
+                ],
+              ),
+            ),
     );
   }
 }
@@ -1141,13 +1077,11 @@ class _SectionCard extends StatelessWidget {
   final String title;
   final Widget child;
   final Widget? trailing;
-  final double titleSize;
 
   const _SectionCard({
     required this.title,
     required this.child,
     this.trailing,
-    this.titleSize = 15.5,
   });
 
   @override
@@ -1169,7 +1103,7 @@ class _SectionCard extends StatelessWidget {
                 child: Text(
                   title,
                   style: TextStyle(
-                    fontSize: titleSize,
+                    fontSize: 15.5,
                     fontWeight: FontWeight.w700,
                     color: AppLight.textPrimary,
                   ),
@@ -1257,10 +1191,6 @@ class _AppDrawer extends ConsumerWidget {
             tile(Icons.medical_services, 'Nearby Camps', () {
               Navigator.pop(context);
               context.push(Routes.camps);
-            }),
-            tile(Icons.sms, 'Offline SMS SOS', () {
-              Navigator.pop(context);
-              context.push(Routes.offlineSos);
             }),
             const Spacer(),
             const Divider(height: 1),

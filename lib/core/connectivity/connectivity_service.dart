@@ -5,7 +5,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
 
 /// Watches network availability and broadcasts online/offline transitions so
-/// the UI can surface the offline SOS path the moment internet drops.
+/// the UI can show a Live/Offline indicator.
 class ConnectivityService {
   final Connectivity _connectivity = Connectivity();
   StreamSubscription<ConnectivityResult>? _subscription;

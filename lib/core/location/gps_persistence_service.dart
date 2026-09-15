@@ -1,17 +1,13 @@
 import 'dart:async';
 
-import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 
-import '../network/api_client.dart';
-import '../storage/secure_storage.dart';
 
-/// Keeps the patient's last-known GPS fresh on the backend (every 5 minutes)
-/// AND cached locally in Hive, so offline SOS (SMS trigger) has a location to
-/// dispatch from even when the phone has no internet. Fully fault-tolerant —
-/// it must never crash the app.
+/// Caches the patient's last-known GPS in Hive every 5 minutes, so screens
+/// such as Nearby Camps have a position right after a cold start, before the
+/// first live fix arrives. Fully fault-tolerant — it must never crash the app.
 class GPSPersistenceService {
   Timer? _persistenceTimer;
   bool _isRunning = false;
@@ -48,7 +44,6 @@ class GPSPersistenceService {
         timeLimit: const Duration(seconds: 10),
       );
 
-      // Cache locally first — this works even with no internet.
       if (Hive.isBoxOpen(_boxName)) {
         final box = Hive.box(_boxName);
         await box.put(_latKey, position.latitude);
@@ -56,34 +51,9 @@ class GPSPersistenceService {
         await box.put(_accuracyKey, position.accuracy);
         await box.put(_timestampKey, DateTime.now().toIso8601String());
       }
-
-      // Skip the network call if we're offline (cache is already updated).
-      final connectivity = await Connectivity().checkConnectivity();
-      if (connectivity == ConnectivityResult.none) {
-        debugPrint('GPS saved locally (offline): ${position.latitude}, ${position.longitude}');
-        return;
-      }
-
-      await _sendLocationToBackend(position.latitude, position.longitude, position.accuracy);
-      debugPrint('GPS persisted to backend: ${position.latitude}, ${position.longitude}');
     } catch (e) {
       // Background service — never throw.
       debugPrint('GPS persistence error (non-fatal): $e');
-    }
-  }
-
-  Future<void> _sendLocationToBackend(double lat, double lng, double accuracy) async {
-    final token = await SecureStorage.getToken();
-    if (token == null || token.isEmpty) return; // not logged in
-    try {
-      await apiClient.put('/api/auth/location', data: {
-        'lat': lat,
-        'lng': lng,
-        'accuracy': accuracy,
-      });
-    } catch (e) {
-      // Ignore — the next tick retries.
-      debugPrint('Location backend update failed (will retry): $e');
     }
   }
 

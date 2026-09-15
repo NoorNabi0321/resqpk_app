@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/location/location_provider.dart';
 import '../../../core/location/location_service.dart';
 import '../../../core/realtime/realtime_provider.dart';
-import '../../../core/storage/driver_contact_storage.dart';
 import '../../../core/realtime/socket_service.dart';
 import '../data/sos_repository.dart';
 import '../data/models/emergency_case_model.dart';
@@ -201,13 +200,6 @@ class SOSNotifier extends StateNotifier<SOSState> {
               shareUrl: data['shareUrl']?.toString(),
             ),
           );
-          // Cache driver contact locally so it survives an internet drop.
-          DriverContactStorage.saveDriverContact(
-            name: driver?['fullName']?.toString(),
-            phone: driver?['phone']?.toString(),
-            vehicleNumber: driver?['vehicleNumber']?.toString(),
-            caseId: state.activeCase?.id,
-          );
           _startPatientLocationUpdates();
           break;
         case 'en_route':
@@ -263,12 +255,6 @@ class SOSNotifier extends StateNotifier<SOSState> {
                   : int.tryParse('${data['etaSeconds']}'),
             ),
           );
-          DriverContactStorage.saveDriverContact(
-            name: driver?['fullName']?.toString(),
-            phone: driver?['phone']?.toString(),
-            vehicleNumber: driver?['vehicleNumber']?.toString(),
-            caseId: state.activeCase?.id,
-          );
           break;
         // v2 — the hospital accepted this patient.
         case 'hospital_accepted':
@@ -294,7 +280,6 @@ class SOSNotifier extends StateNotifier<SOSState> {
           );
           break;
         case 'cancelled':
-          DriverContactStorage.clearDriverContact();
           _cleanup();
           state = const SOSState(status: SOSStatus.cancelled);
           break;
@@ -314,7 +299,6 @@ class SOSNotifier extends StateNotifier<SOSState> {
 
   void _onCompleted() {
     _locationUpdateTimer?.cancel();
-    DriverContactStorage.clearDriverContact();
     Future.delayed(const Duration(seconds: 3), () {
       if (state.status == SOSStatus.completed) {
         final id = state.activeCaseId;

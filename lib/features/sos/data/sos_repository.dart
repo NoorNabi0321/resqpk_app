@@ -11,7 +11,6 @@ class SOSRepository {
     required double lng,
     double? accuracy,
     String? address,
-    String triggerMethod = 'app_sos',
   }) async {
     try {
       final res = await apiClient.post('/api/sos/trigger', data: {
@@ -19,7 +18,6 @@ class SOSRepository {
         'lng': lng,
         if (accuracy != null) 'accuracy': accuracy,
         if (address != null && address.isNotEmpty) 'address': address,
-        'triggerMethod': triggerMethod,
       });
       return EmergencyCaseModel.fromJson(_data(res));
     } catch (e) {

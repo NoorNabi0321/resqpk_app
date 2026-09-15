@@ -72,7 +72,7 @@ dependencies:
   flutter_local_notifications: ^17.1.2
 
   # Other
-  url_launcher: ^6.2.5               # For missed call trigger
+  url_launcher: ^6.2.5               # Phone calls, maps and links
   share_plus: ^7.2.1                 # Share first aid guides
   image_picker: ^1.0.7               # Photo capture for AI report
   record: ^6.0.0                     # Audio recording (AI voice notes). 6.x pulls
