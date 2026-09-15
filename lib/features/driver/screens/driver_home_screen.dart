@@ -88,7 +88,11 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
     });
 
     final driverState = ref.watch(driverOnlineProvider);
-    final isConnected = ref.watch(socketServiceProvider).isConnected;
+    // Must be a reactive source. Reading socketServiceProvider's .isConnected
+    // captured `false` at first build and never rebuilt, which left this screen
+    // stuck on "Disconnected" with Go Online disabled.
+    final isConnected = ref.watch(socketReadyProvider).value ??
+        ref.read(socketServiceProvider).isAuthenticated;
     final isOnline = ref.watch(isOnlineProvider).value ?? true;
     final positionAsync = ref.watch(currentPositionStreamProvider);
     final position = positionAsync.asData?.value ?? driverState.currentPosition;
@@ -122,7 +126,7 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
                 ),
               ],
               const SizedBox(height: 32),
-              _toggle(driverState),
+              _toggle(driverState, isConnected),
               const SizedBox(height: 24),
               _gpsCard(position),
               const SizedBox(height: 16),
@@ -170,10 +174,13 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
     );
   }
 
-  Widget _toggle(DriverOnlineState s) {
+  Widget _toggle(DriverOnlineState s, bool isConnected) {
     final online = s.isOnline;
+    // Going online is a socket round-trip, so block the tap until the socket
+    // is actually up rather than letting it run into a timeout.
+    final blocked = s.isLoading || (!online && !isConnected);
     return GestureDetector(
-      onTap: s.isLoading
+      onTap: blocked
           ? null
           : () {
               final notifier = ref.read(driverOnlineProvider.notifier);
@@ -187,7 +194,9 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
         duration: const Duration(milliseconds: 300),
         height: 72,
         decoration: BoxDecoration(
-          color: online ? AppColors.confirmedGreen : AppColors.surfaceThree,
+          color: online
+            ? AppColors.confirmedGreen
+            : (isConnected ? AppColors.surfaceThree : AppColors.surfaceTwo),
           borderRadius: BorderRadius.circular(36),
         ),
         alignment: Alignment.center,
@@ -198,7 +207,9 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
                 child: CircularProgressIndicator(strokeWidth: 2.6, color: Colors.white),
               )
             : Text(
-                online ? 'You are Online' : 'You are Offline',
+                online
+                    ? 'You are Online'
+                    : (isConnected ? 'You are Offline' : 'Connecting to server…'),
                 style: AppTextStyles.buttonLabel
                     .copyWith(color: online ? Colors.white : AppColors.textSecondary),
               ),

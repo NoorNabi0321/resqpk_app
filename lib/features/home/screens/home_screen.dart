@@ -729,6 +729,7 @@ class _SosBanner extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final counting = state.isSosCountingDown;
     final active = state.activeCaseId != null;
+    final searching = state.status == SOSStatus.searching && !active;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 20),
@@ -859,9 +860,11 @@ class _SosBanner extends ConsumerWidget {
                   Text(
                     counting
                         ? 'Release to cancel'
-                        : active
-                            ? 'Emergency active'
-                            : 'Press and hold\nfor 10 seconds',
+                        : searching
+                            ? 'Searching for the\nnearest ambulance…'
+                            : active
+                                ? 'Emergency active'
+                                : 'Press and hold\nfor 10 seconds',
                     textAlign: TextAlign.right,
                     style: const TextStyle(
                       color: Colors.white,
@@ -871,10 +874,17 @@ class _SosBanner extends ConsumerWidget {
                     ),
                   ),
                   const SizedBox(height: 6),
-                  const Text(
-                    'We will alert the\nnearest responders',
+                  // A failed SOS must say so — this is the one action that
+                  // cannot be allowed to fail silently.
+                  Text(
+                    state.error ?? 'We will alert the\nnearest responders',
                     textAlign: TextAlign.right,
-                    style: TextStyle(color: Colors.white70, fontSize: 11.5, height: 1.3),
+                    style: TextStyle(
+                      color: state.error != null ? Colors.white : Colors.white70,
+                      fontSize: 11.5,
+                      height: 1.3,
+                      fontWeight: state.error != null ? FontWeight.w700 : FontWeight.normal,
+                    ),
                   ),
                 ],
               ),

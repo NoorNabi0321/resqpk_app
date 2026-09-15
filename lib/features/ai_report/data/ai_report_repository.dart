@@ -61,7 +61,14 @@ class AIReportRepository {
       final data = (res.data is Map && res.data['data'] != null)
           ? res.data['data'] as Map<String, dynamic>
           : res.data as Map<String, dynamic>;
-      return AIReportModel.fromJson(data);
+      final report = AIReportModel.fromJson(data);
+      // A 200 from this endpoint means the report finished. Older backends
+      // omit generation_status, which would leave the model looking 'pending'
+      // and hide the result screen the patient just waited for.
+      if (!report.isComplete && (report.id != null || report.urgencyLevel != null)) {
+        return report.copyWith(generationStatus: 'completed');
+      }
+      return report;
     } catch (e) {
       throw Exception(_err(e));
     }
@@ -99,19 +106,23 @@ class AIReportRepository {
   }
 
   /// Downloads the PDF to a local file so it can be rendered, shared, or saved.
+  ///
+  /// Uses a bare Dio client on purpose: the shared apiClient has an interceptor
+  /// that stamps our bearer token onto every request, and the signed URL points
+  /// at Supabase Storage, which rejects an Authorization header it cannot parse.
   Future<File> downloadPdf(String url, String filePath) async {
     try {
-      final res = await apiClient.dio.get<List<int>>(
+      final res = await Dio().get<List<int>>(
         url,
         options: Options(
           responseType: ResponseType.bytes,
-          // The signed URL points at Supabase Storage, not our API — sending
-          // the app's bearer token would be rejected there.
-          headers: {'Authorization': null},
+          receiveTimeout: const Duration(seconds: 60),
         ),
       );
+      final bytes = res.data ?? <int>[];
+      if (bytes.isEmpty) throw Exception('The downloaded report was empty');
       final file = File(filePath);
-      await file.writeAsBytes(res.data ?? <int>[]);
+      await file.writeAsBytes(bytes);
       return file;
     } catch (e) {
       throw Exception(_err(e));

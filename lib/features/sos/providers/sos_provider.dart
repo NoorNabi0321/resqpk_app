@@ -153,7 +153,14 @@ class SOSNotifier extends StateNotifier<SOSState> {
         accuracy: pos.accuracy,
       );
 
-      await _socketService.joinCaseRoom(created.id);
+      // Hospital decisions are broadcast to the case room only (driver
+      // assignment also reaches the patient's personal room), so retry once if
+      // the socket was still connecting when the SOS fired.
+      var joined = await _socketService.joinCaseRoom(created.id);
+      if (joined['success'] != true) {
+        await Future<void>.delayed(const Duration(seconds: 2));
+        joined = await _socketService.joinCaseRoom(created.id);
+      }
       _listenToSocketEvents();
 
       state = state.copyWith(
@@ -227,6 +234,9 @@ class SOSNotifier extends StateNotifier<SOSState> {
           break;
         case 'hospital_changed':
           state = state.copyWith(
+            // Whoever gains the case must review it from scratch.
+            hospitalDecision: 'awaiting_review',
+            clearPreparationNote: true,
             activeCase: state.activeCase?.copyWith(
               hospitalId: data['hospitalId']?.toString(),
               hospitalName: data['hospitalName']?.toString(),
@@ -360,6 +370,9 @@ class SOSNotifier extends StateNotifier<SOSState> {
   void applyHospitalChange({String? id, String? name, double? lat, double? lng}) {
     if (state.activeCase == null) return;
     state = state.copyWith(
+      // A newly chosen hospital has not accepted anything yet.
+      hospitalDecision: 'awaiting_review',
+      clearPreparationNote: true,
       activeCase: state.activeCase!.copyWith(
         hospitalId: id,
         hospitalName: name,

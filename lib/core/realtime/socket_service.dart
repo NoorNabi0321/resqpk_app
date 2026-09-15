@@ -36,6 +36,47 @@ class SocketService {
   bool get isAuthenticated => _isAuthenticated;
   String? get connectedUserId => _connectedUserId;
 
+  /// The role the server authenticated this socket as. The backend only binds
+  /// role-specific handlers, so a socket left over from a previous session
+  /// silently ignores this role's events.
+  String? _connectedRole;
+  String? get connectedRole => _connectedRole;
+
+  /// Emits whenever authentication state flips. SocketService is a plain
+  /// mutable object, so widgets cannot watch its fields directly — reading
+  /// `isConnected` in build() captures the value once and never updates.
+  final StreamController<bool> _readyController = StreamController<bool>.broadcast();
+
+  /// Current readiness first, then every change — so a late subscriber still
+  /// starts from the right value.
+  Stream<bool> get readyStream async* {
+    yield _isAuthenticated;
+    yield* _readyController.stream;
+  }
+
+  void _setReady(bool ready) {
+    _isAuthenticated = ready;
+    if (!_readyController.isClosed) _readyController.add(ready);
+  }
+
+  /// Completes when the server has authenticated this socket.
+  Completer<void>? _readyCompleter;
+
+  /// Waits until the socket is authenticated, so an emitWithAck has a handler
+  /// to answer it. Without this, an action fired during the handshake — which
+  /// on a cold-started server can take half a minute — silently times out.
+  Future<bool> waitUntilReady({Duration timeout = const Duration(seconds: 20)}) async {
+    if (_isAuthenticated) return true;
+    final completer = _readyCompleter;
+    if (completer == null) return false;
+    try {
+      await completer.future.timeout(timeout);
+      return _isAuthenticated;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<void> connect({String? userId}) async {
     final token = await SecureStorage.getToken();
     if (token == null || token.isEmpty) {
@@ -47,16 +88,20 @@ class SocketService {
     _socket?.dispose();
     _socket = null;
     _isConnected = false;
-    _isAuthenticated = false;
+    _setReady(false);
     _connectedUserId = userId;
+    _readyCompleter = Completer<void>();
 
     _socket = io.io(
       ApiConstants.currentBaseUrl,
       io.OptionBuilder()
-          .setTransports(['websocket'])
+          // Polling is kept as a fallback: some mobile carriers and captive
+          // networks block raw websocket upgrades, and websocket-only would
+          // then never connect at all.
+          .setTransports(['websocket', 'polling'])
           .enableAutoConnect()
           .setAuth({'token': token})
-          .setReconnectionAttempts(5)
+          .setReconnectionAttempts(10)
           .setReconnectionDelay(2000)
           .build(),
     );
@@ -68,16 +113,24 @@ class SocketService {
       debugPrint('Socket connected: ${socket.id}');
     });
     socket.on(SocketEvents.authenticated, (data) {
-      _isAuthenticated = true;
-      debugPrint('Socket authenticated: $data');
+      // The server registers role handlers only after authenticating, so this
+      // is the first moment an emitWithAck can actually be answered.
+      _connectedRole = _asMap(data)['role']?.toString();
+      _setReady(true);
+      if (!(_readyCompleter?.isCompleted ?? true)) _readyCompleter!.complete();
+      debugPrint('Socket authenticated as $_connectedRole: $data');
     });
     socket.on(SocketEvents.authError, (err) {
-      _isAuthenticated = false;
+      _setReady(false);
       debugPrint('Socket auth error: $err');
     });
     socket.onDisconnect((_) {
       _isConnected = false;
-      _isAuthenticated = false;
+      _setReady(false);
+      // Socket.io reconnects on its own and re-authenticates; give callers a
+      // fresh completer to wait on, otherwise waitUntilReady() would see the
+      // old completed one and give up instantly mid-reconnect.
+      if (_readyCompleter?.isCompleted ?? true) _readyCompleter = Completer<void>();
       debugPrint('Socket disconnected');
     });
     socket.onConnectError((err) => debugPrint('Socket connect error: $err'));
@@ -132,6 +185,9 @@ class SocketService {
     _isConnected = false;
     _isAuthenticated = false;
     _connectedUserId = null;
+    _connectedRole = null;
+    _readyCompleter = null;
+    _setReady(false);
   }
 
   // --- Driver emits ---------------------------------------------------------
@@ -148,6 +204,14 @@ class SocketService {
   }
 
   Future<Map<String, dynamic>> emitDriverGoOnline(double lat, double lng, double heading) async {
+    final ready = await waitUntilReady();
+    if (!ready) {
+      return {
+        'success': false,
+        'error': 'Could not reach the server. Check your internet and try again.',
+      };
+    }
+
     final completer = Completer<Map<String, dynamic>>();
     _socket?.emitWithAck(
       SocketEvents.driverGoOnline,
@@ -157,8 +221,11 @@ class SocketService {
       },
     );
     return completer.future.timeout(
-      const Duration(seconds: 10),
-      onTimeout: () => {'success': false, 'error': 'timeout'},
+      const Duration(seconds: 15),
+      onTimeout: () => {
+        'success': false,
+        'error': 'The server did not respond. Please try again.',
+      },
     );
   }
 
@@ -170,6 +237,9 @@ class SocketService {
   /// which are broadcast per-case, reach this driver.
   Future<Map<String, dynamic>> driverJoinCase(String caseId) async {
     _activeCaseId = caseId;
+    final ready = await waitUntilReady();
+    if (!ready) return {'success': false, 'error': 'not_connected'};
+
     final completer = Completer<Map<String, dynamic>>();
     _socket?.emitWithAck(
       SocketEvents.driverJoinCase,
@@ -193,6 +263,9 @@ class SocketService {
 
   Future<Map<String, dynamic>> joinCaseRoom(String caseId) async {
     _activeCaseId = caseId;
+    final ready = await waitUntilReady();
+    if (!ready) return {'success': false, 'error': 'not_connected'};
+
     final completer = Completer<Map<String, dynamic>>();
     _socket?.emitWithAck(
       SocketEvents.patientJoinCase,
@@ -224,5 +297,6 @@ class SocketService {
     _aiReportController.close();
     disconnect();
     _socket?.dispose();
+    _readyController.close();
   }
 }

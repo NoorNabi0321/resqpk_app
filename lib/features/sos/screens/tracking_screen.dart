@@ -49,6 +49,12 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
   final List<_CaseUpdate> _updates = [];
   int _unreadUpdates = 0;
 
+  // Destination the patient confirms. The nearest hospital is suggested once
+  // an ambulance accepts, but no hospital is told until the patient confirms.
+  Map<String, dynamic>? _suggestedHospital;
+  bool _loadingSuggestion = false;
+  bool _confirmingHospital = false;
+
   @override
   void initState() {
     super.initState();
@@ -76,6 +82,7 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
     // Fetch the road route now and refresh it as the driver moves.
     _fetchRoute();
     _routeTimer = Timer.periodic(const Duration(seconds: 45), (_) => _fetchRoute());
+    Future.microtask(_loadSuggestion);
 
     // A redirect changes the destination — reassure the patient without
     // surfacing the clinical reason, which is for the driver and records only.
@@ -241,6 +248,32 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
     );
   }
 
+  /// Nearest emergency hospital, offered as the default destination.
+  Future<void> _loadSuggestion() async {
+    final c = ref.read(sosProvider).activeCase;
+    if (c == null || c.hospitalId != null) return;
+    if (_loadingSuggestion || _suggestedHospital != null) return;
+    // Without real coordinates "nearest" would be meaningless.
+    if (c.patientLat == 0 && c.patientLng == 0) return;
+
+    setState(() => _loadingSuggestion = true);
+    try {
+      final hospitals = await _repo.getNearbyHospitals(c.patientLat, c.patientLng);
+      if (!mounted) return;
+      setState(() => _suggestedHospital = hospitals.isNotEmpty ? hospitals.first : null);
+    } catch (_) {
+      // The patient can still pick from the full list.
+    } finally {
+      if (mounted) setState(() => _loadingSuggestion = false);
+    }
+  }
+
+  Future<void> _confirmSuggestedHospital() async {
+    final hospital = _suggestedHospital;
+    if (hospital == null) return;
+    await _changeHospital(hospital);
+  }
+
   Future<void> _openChangeHospitalSheet() async {
     final c = ref.read(sosProvider).activeCase;
     if (c == null) return;
@@ -315,7 +348,12 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
   Future<void> _changeHospital(Map<String, dynamic> hospital) async {
     final caseId = ref.read(sosProvider).activeCaseId;
     final id = hospital['id']?.toString();
-    if (caseId == null || id == null) return;
+    if (caseId == null || id == null || _confirmingHospital) return;
+
+    final isFirstChoice = ref.read(sosProvider).activeCase?.hospitalId == null;
+    final name = hospital['name']?.toString() ?? 'the hospital';
+
+    setState(() => _confirmingHospital = true);
     try {
       await _repo.changeHospital(caseId, id);
       ref.read(sosProvider.notifier).applyHospitalChange(
@@ -325,9 +363,17 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
             lng: double.tryParse('${hospital['lng']}'),
           );
       _fetchRoute();
+      _addUpdate(_CaseUpdate(
+        kind: _UpdateKind.hospital,
+        title: isFirstChoice ? 'Hospital confirmed: $name' : 'Hospital changed to $name',
+        body: 'They have been notified and are reviewing your case.',
+        at: DateTime.now(),
+      ));
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Hospital changed to ${hospital['name']}')),
+          SnackBar(
+            content: Text(isFirstChoice ? '$name has been notified' : 'Hospital changed to $name'),
+          ),
         );
       }
     } catch (e) {
@@ -336,6 +382,8 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
           SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
         );
       }
+    } finally {
+      if (mounted) setState(() => _confirmingHospital = false);
     }
   }
 
@@ -401,7 +449,11 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
     // the destination hospital is switched.
     ref.listen(
       sosProvider.select((s) => '${s.status}:${s.activeCase?.hospitalId}'),
-      (_, __) => _fetchRoute(),
+      (_, __) {
+        _fetchRoute();
+        // A case restored mid-search gains a driver later; suggest then.
+        _loadSuggestion();
+      },
     );
 
     // Navigate home when the case completes or is cancelled.
@@ -563,6 +615,12 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
                   onChangeHospital: _openChangeHospitalSheet,
                   hospitalConfirmed: ref.watch(sosProvider).isHospitalConfirmed,
                   preparationNote: ref.watch(sosProvider).hospitalPreparationNote,
+                  hospitalSelected: c.hospitalId != null,
+                  hasDriver: c.driverId != null,
+                  suggestedHospital: _suggestedHospital,
+                  loadingSuggestion: _loadingSuggestion,
+                  confirmingHospital: _confirmingHospital,
+                  onConfirmHospital: _confirmSuggestedHospital,
                 ),
               ],
             ),
@@ -766,6 +824,116 @@ class _StatusPill extends StatelessWidget {
   }
 }
 
+/// Shown until the patient confirms a destination. No hospital is notified
+/// before this; the nearest one is only a default the patient can change.
+class _HospitalConfirmBlock extends StatelessWidget {
+  final bool hasDriver;
+  final Map<String, dynamic>? suggestedHospital;
+  final bool loading;
+  final bool confirming;
+  final VoidCallback onConfirm;
+  final VoidCallback onChooseAnother;
+
+  const _HospitalConfirmBlock({
+    required this.hasDriver,
+    required this.suggestedHospital,
+    required this.loading,
+    required this.confirming,
+    required this.onConfirm,
+    required this.onChooseAnother,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final name = suggestedHospital?['name']?.toString();
+    final distance = suggestedHospital?['distanceText']?.toString();
+
+    final String message;
+    if (!hasDriver) {
+      message = 'You can choose a hospital once an ambulance accepts your request.';
+    } else if (name == null) {
+      message = loading
+          ? 'Finding the nearest hospital…'
+          : 'Could not find a nearby hospital. Choose one from the list.';
+    } else {
+      message = 'Nearest: $name${distance != null ? ' · $distance' : ''}';
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.warningAmber.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.warningAmber.withValues(alpha: 0.55)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.local_hospital, color: AppColors.warningAmber, size: 18),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  hasDriver ? 'Confirm your hospital' : 'Hospital',
+                  style: AppTextStyles.subtitle.copyWith(fontSize: 15),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(message, style: name != null ? AppTextStyles.body : AppTextStyles.caption),
+          if (hasDriver) ...[
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: (name == null || confirming) ? null : onConfirm,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.confirmedGreen,
+                      disabledBackgroundColor: AppColors.surfaceThree,
+                      minimumSize: const Size(0, 44),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+                    ),
+                    child: confirming
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          )
+                        : Text('Confirm', style: AppTextStyles.buttonLabel.copyWith(fontSize: 14)),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: confirming ? null : onChooseAnother,
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: AppColors.infoBlue),
+                      minimumSize: const Size(0, 44),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+                    ),
+                    child: Text(
+                      'Choose another',
+                      style: AppTextStyles.caption.copyWith(color: AppColors.infoBlue),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'The hospital is only notified after you confirm.',
+              style: AppTextStyles.caption.copyWith(fontSize: 11),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
 class _StatusCard extends StatelessWidget {
   final String driverName;
   final String vehicleNumber;
@@ -779,6 +947,12 @@ class _StatusCard extends StatelessWidget {
   final VoidCallback onChangeHospital;
   final bool hospitalConfirmed;
   final String? preparationNote;
+  final bool hospitalSelected;
+  final bool hasDriver;
+  final Map<String, dynamic>? suggestedHospital;
+  final bool loadingSuggestion;
+  final bool confirmingHospital;
+  final VoidCallback onConfirmHospital;
 
   const _StatusCard({
     required this.driverName,
@@ -793,6 +967,12 @@ class _StatusCard extends StatelessWidget {
     required this.onChangeHospital,
     this.hospitalConfirmed = false,
     this.preparationNote,
+    this.hospitalSelected = true,
+    this.hasDriver = true,
+    this.suggestedHospital,
+    this.loadingSuggestion = false,
+    this.confirmingHospital = false,
+    required this.onConfirmHospital,
   });
 
   @override
@@ -857,52 +1037,68 @@ class _StatusCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 16),
-              Row(
-                children: [
-                  const Icon(Icons.local_hospital, color: AppColors.confirmedGreen, size: 18),
-                  const SizedBox(width: 8),
-                  Expanded(child: Text(hospitalName, style: AppTextStyles.body)),
-                  if (hospitalConfirmed)
-                    TweenAnimationBuilder<double>(
-                      tween: Tween(begin: 0.85, end: 1),
-                      duration: const Duration(milliseconds: 320),
-                      curve: Curves.easeOutBack,
-                      builder: (context, scale, child) =>
-                          Transform.scale(scale: scale, child: child),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                        decoration: BoxDecoration(
-                          color: AppColors.confirmedGreen.withValues(alpha: 0.18),
-                          borderRadius: BorderRadius.circular(999),
-                          border: Border.all(color: AppColors.confirmedGreen),
+              if (!hospitalSelected)
+                _HospitalConfirmBlock(
+                  hasDriver: hasDriver,
+                  suggestedHospital: suggestedHospital,
+                  loading: loadingSuggestion,
+                  confirming: confirmingHospital,
+                  onConfirm: onConfirmHospital,
+                  onChooseAnother: onChangeHospital,
+                )
+              else ...[
+                Row(
+                  children: [
+                    const Icon(Icons.local_hospital, color: AppColors.confirmedGreen, size: 18),
+                    const SizedBox(width: 8),
+                    Expanded(child: Text(hospitalName, style: AppTextStyles.body)),
+                    if (hospitalConfirmed)
+                      TweenAnimationBuilder<double>(
+                        tween: Tween(begin: 0.85, end: 1),
+                        duration: const Duration(milliseconds: 320),
+                        curve: Curves.easeOutBack,
+                        builder: (context, scale, child) =>
+                            Transform.scale(scale: scale, child: child),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: AppColors.confirmedGreen.withValues(alpha: 0.18),
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(color: AppColors.confirmedGreen),
+                          ),
+                          child: Text(
+                            'Hospital confirmed ✓',
+                            style: AppTextStyles.caption.copyWith(
+                                color: AppColors.confirmedGreen, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      )
+                    else
+                      TextButton(
+                        onPressed: onChangeHospital,
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          minimumSize: const Size(0, 32),
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         ),
                         child: Text(
-                          'Hospital confirmed ✓',
-                          style: AppTextStyles.caption
-                              .copyWith(color: AppColors.confirmedGreen, fontWeight: FontWeight.bold),
+                          'Change',
+                          style: AppTextStyles.caption.copyWith(color: AppColors.infoBlue),
                         ),
                       ),
-                    )
-                  else
-                    TextButton(
-                      onPressed: onChangeHospital,
-                      style: TextButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 8),
-                        minimumSize: const Size(0, 32),
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      ),
-                      child: Text(
-                        'Change',
-                        style: AppTextStyles.caption.copyWith(color: AppColors.infoBlue),
-                      ),
-                    ),
-                ],
-              ),
-              if (hospitalConfirmed && preparationNote != null && preparationNote!.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(top: 6, left: 26),
-                  child: Text(preparationNote!, style: AppTextStyles.caption),
+                  ],
                 ),
+                if (!hospitalConfirmed)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4, left: 26),
+                    child: Text('Waiting for the hospital to accept', style: AppTextStyles.caption),
+                  ),
+                if (hospitalConfirmed && preparationNote != null && preparationNote!.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6, left: 26),
+                    child: Text(preparationNote!, style: AppTextStyles.caption),
+                  ),
+              ],
               const SizedBox(height: 16),
               OutlinedButton.icon(
                 onPressed: onAiReport,

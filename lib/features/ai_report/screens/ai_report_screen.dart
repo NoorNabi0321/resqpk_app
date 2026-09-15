@@ -116,6 +116,8 @@ class _AIReportScreenState extends ConsumerState<AIReportScreen> {
     ref.listen(aiReportProvider.select((s) => s.isSubmitting), (prev, next) {
       if (next == true) {
         _startElapsed();
+        // Allow the next finished report to open its PDF too.
+        _openedPdf = false;
       } else {
         _stopElapsed();
       }
