@@ -1,58 +1,61 @@
 import 'package:flutter/material.dart';
 
-/// ResQPK dark-first color system.
+import '../theme/tokens.dart';
+
+/// Legacy colour names, now backed by the shared tokens in `core/theme/tokens.dart`.
+///
+/// Kept because 26 screens reference them; new work should use `Resq` and
+/// `ResqDark` directly. The values are the unified palette, so the three
+/// different reds and two different greens the app had collapse into one each.
+///
+/// This class is the dark set, used by the driver app.
 class AppColors {
   AppColors._();
 
-  // Background
-  static const Color background = Color(0xFF0A0E1A); // deep navy
-  static const Color surfaceOne = Color(0xFF111827);
-  static const Color surfaceTwo = Color(0xFF1C2333);
-  static const Color surfaceThree = Color(0xFF243044);
-  static const Color glassOverlay = Color(0x0FFFFFFF); // rgba(255,255,255,0.06)
+  // Surfaces
+  static const Color background = ResqDark.canvas;
+  static const Color surfaceOne = ResqDark.surface;
+  static const Color surfaceTwo = ResqDark.surfaceRaised;
+  static const Color surfaceThree = ResqDark.surfaceHigh;
+  static const Color glassOverlay = ResqDark.overlay;
+  static const Color borderGlass = ResqDark.borderGlass;
 
-  // Accent
-  static const Color sosRed = Color(0xFFFF2D3B);
-  static const Color sosGlow = Color(0x59FF2D3B); // rgba(255,45,59,0.35)
-  static const Color confirmedGreen = Color(0xFF00D68F);
-  static const Color warningAmber = Color(0xFFFFB930);
-  static const Color infoBlue = Color(0xFF3B82F6);
+  // Accents — identical to the light set, because they read on both grounds.
+  static const Color sosRed = Resq.critical;
+  static const Color sosGlow = Color(0x59DC2626);
+  static const Color confirmedGreen = Resq.ready;
+  static const Color warningAmber = Resq.decision;
+  static const Color infoBlue = Resq.info;
 
-  // Text
-  static const Color textPrimary = Color(0xFFF9FAFB);
-  static const Color textSecondary = Color(0xFF9CA3AF);
-  static const Color textDisabled = Color(0xFF4B5563);
-
-  // Border
-  static const Color borderGlass = Color(0x1AFFFFFF); // rgba(255,255,255,0.10)
+  // Text on dark
+  static const Color textPrimary = ResqDark.ink;
+  static const Color textSecondary = ResqDark.inkMuted;
+  static const Color textDisabled = ResqDark.inkFaint;
 }
 
-/// Light palette for the patient home screen. The rest of the app stays on the
-/// dark system above; this is scoped to the screens that follow the new
-/// light reference design.
+/// The light set, used by patient-facing screens.
 class AppLight {
   AppLight._();
 
-  static const Color background = Color(0xFFF4F6FA);
-  static const Color card = Color(0xFFFFFFFF);
-  static const Color cardAlt = Color(0xFFF8FAFC);
-  static const Color border = Color(0xFFE8ECF3);
+  static const Color background = Resq.canvas;
+  static const Color card = Resq.surface;
+  static const Color cardAlt = Resq.surfaceAlt;
+  static const Color border = Resq.border;
 
-  // Deep navy used by the location banner.
-  static const Color navy = Color(0xFF152238);
-  static const Color navyDeep = Color(0xFF0D1626);
+  static const Color navy = Resq.brand;
+  static const Color navyDeep = Color(0xFF071A33);
 
-  static const Color red = Color(0xFFE8202F);
-  static const Color redSoft = Color(0xFFFF4757);
-  static const Color green = Color(0xFF16A34A);
-  static const Color greenTint = Color(0xFFE7F8EE);
-  static const Color blue = Color(0xFF2563EB);
-  static const Color blueTint = Color(0xFFEAF1FE);
-  static const Color amber = Color(0xFFF59E0B);
-  static const Color amberTint = Color(0xFFFEF4E2);
+  static const Color red = Resq.critical;
+  static const Color redSoft = Color(0xFFEF4444);
+  static const Color green = Resq.ready;
+  static const Color greenTint = Resq.readyTint;
+  static const Color blue = Resq.info;
+  static const Color blueTint = Resq.infoTint;
+  static const Color amber = Resq.decision;
+  static const Color amberTint = Resq.decisionTint;
   static const Color tealTint = Color(0xFFE6F7F5);
 
-  static const Color textPrimary = Color(0xFF0F172A);
-  static const Color textSecondary = Color(0xFF64748B);
-  static const Color textFaint = Color(0xFF94A3B8);
+  static const Color textPrimary = Resq.ink;
+  static const Color textSecondary = Resq.inkMuted;
+  static const Color textFaint = Resq.inkFaint;
 }

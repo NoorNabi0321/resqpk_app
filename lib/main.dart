@@ -2,10 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:google_fonts/google_fonts.dart';
 
-import 'core/constants/app_colors.dart';
 import 'core/network/fcm_service.dart';
+import 'core/theme/app_theme.dart';
 import 'core/router/app_router.dart';
 import 'core/storage/secure_storage.dart';
 import 'features/first_aid/data/first_aid_repository.dart';
@@ -41,16 +40,10 @@ class ResQPKApp extends StatelessWidget {
     return MaterialApp.router(
       title: 'ResQPK',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        useMaterial3: true,
-        brightness: Brightness.dark,
-        scaffoldBackgroundColor: AppColors.background,
-        colorScheme: const ColorScheme.dark(
-          primary: AppColors.sosRed,
-          surface: AppColors.surfaceOne,
-        ),
-        textTheme: GoogleFonts.interTextTheme(ThemeData.dark().textTheme),
-      ),
+      // Dark for now, because most screens still hand-style dark surfaces.
+      // Patient screens move to ResqTheme.light one at a time; the driver app
+      // keeps this one for good — see Plan 3 §2.2.
+      theme: ResqTheme.dark,
       routerConfig: appRouter,
     );
   }
