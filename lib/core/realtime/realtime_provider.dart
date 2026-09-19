@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/auth/providers/auth_provider.dart';
+import '../../features/sos/providers/session_provider.dart';
 import 'socket_service.dart';
 
 final socketServiceProvider = Provider<SocketService>((ref) {
@@ -14,9 +15,19 @@ final socketServiceProvider = Provider<SocketService>((ref) {
 /// carries the current user's token/role, not a lingering previous session.
 final socketConnectionProvider = FutureProvider<void>((ref) async {
   final authState = ref.watch(authProvider);
+  final session = ref.watch(sessionProvider);
   final socketService = ref.read(socketServiceProvider);
 
   if (!authState.isAuthenticated) {
+    // A patient with no account still needs live updates. Their case token is
+    // the credential, and it is good for that one case only.
+    if (session.hasActiveCase) {
+      if (socketService.connectedUserId != session.caseId) {
+        socketService.disconnect();
+        await socketService.connect(userId: session.caseId, caseToken: session.caseToken);
+      }
+      return;
+    }
     socketService.disconnect();
     return;
   }

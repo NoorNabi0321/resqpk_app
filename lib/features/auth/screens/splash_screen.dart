@@ -45,8 +45,22 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
     } else if (!seenOnboarding) {
       context.go(Routes.onboarding);
     } else {
-      context.go(Routes.roleSelect);
+      // No account, and none needed. A case saved on this device is picked back
+      // up first: a force-close during an emergency must not lose the ambulance
+      // already on its way.
+      final resumed = await _resumeAnonymousCase();
+      if (resumed || !mounted) return;
+      context.go(Routes.home);
     }
+  }
+
+  /// Returns true when it navigated to a restored case.
+  Future<bool> _resumeAnonymousCase() async {
+    await ref.read(sosProvider.notifier).restoreFromSession();
+    if (!mounted) return false;
+    if (ref.read(sosProvider).activeCaseId == null) return false;
+    context.go(Routes.tracking);
+    return true;
   }
 
   /// Sends the user straight back to their live case, if they have one.

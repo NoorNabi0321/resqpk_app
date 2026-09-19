@@ -44,7 +44,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('has_seen_onboarding', true);
     if (!mounted) return;
-    context.go(Routes.roleSelect);
+    // Straight to the SOS button. Choosing a role is something drivers do from
+    // More; a patient has nothing to choose.
+    context.go(Routes.home);
   }
 
   void _next() {

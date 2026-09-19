@@ -22,19 +22,45 @@ class ApiClient {
   /// Exposed for features that need multipart/streaming (e.g. AI report upload).
   Dio get dio => _dio;
 
-  Future<Map<String, dynamic>> post(String path, {Map<String, dynamic>? data}) async {
-    final res = await _dio.post(path, data: data);
+  Future<Map<String, dynamic>> post(
+    String path, {
+    Map<String, dynamic>? data,
+    String? caseToken,
+  }) async {
+    final res = await _dio.post(path, data: data, options: _options(caseToken));
     return _asMap(res.data);
   }
 
-  Future<Map<String, dynamic>> get(String path, {Map<String, dynamic>? queryParameters}) async {
-    final res = await _dio.get(path, queryParameters: queryParameters);
+  Future<Map<String, dynamic>> get(
+    String path, {
+    Map<String, dynamic>? queryParameters,
+    String? caseToken,
+  }) async {
+    final res = await _dio.get(
+      path,
+      queryParameters: queryParameters,
+      options: _options(caseToken),
+    );
     return _asMap(res.data);
   }
 
-  Future<Map<String, dynamic>> put(String path, {Map<String, dynamic>? data}) async {
-    final res = await _dio.put(path, data: data);
+  Future<Map<String, dynamic>> put(
+    String path, {
+    Map<String, dynamic>? data,
+    String? caseToken,
+  }) async {
+    final res = await _dio.put(path, data: data, options: _options(caseToken));
     return _asMap(res.data);
+  }
+
+  /// Sends a single case's token instead of the account token — how a patient
+  /// with no account reads their own case.
+  Options? _options(String? caseToken) {
+    if (caseToken == null || caseToken.isEmpty) return null;
+    return Options(
+      headers: {'Authorization': 'Bearer $caseToken'},
+      extra: const {'caseScoped': true},
+    );
   }
 
   Map<String, dynamic> _asMap(dynamic data) {

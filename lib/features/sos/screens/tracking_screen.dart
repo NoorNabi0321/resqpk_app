@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -18,6 +19,7 @@ import '../../ai_report/data/models/ai_report_model.dart';
 import '../../ai_report/providers/ai_report_provider.dart';
 import '../../first_aid/providers/first_aid_provider.dart';
 import '../data/sos_repository.dart';
+import '../providers/session_provider.dart';
 import '../providers/sos_provider.dart';
 
 class TrackingScreen extends ConsumerStatefulWidget {
@@ -575,6 +577,8 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
                 child: Row(
                   children: [
                     _StatusPill(status: ref.watch(sosProvider).status),
+                    const SizedBox(width: 8),
+                    _RequestCodeChip(caseId: c.id),
                     const Spacer(),
                     _UpdatesButton(
                       unread: _unreadUpdates,
@@ -819,6 +823,51 @@ class _StatusPill extends StatelessWidget {
           const SizedBox(width: 8),
           Text('EMERGENCY ACTIVE', style: AppTextStyles.caption.copyWith(color: AppColors.sosRed)),
         ],
+      ),
+    );
+  }
+}
+
+/// The request code, for a patient who has no account.
+///
+/// It is the only handle they have on this emergency — it reopens the request
+/// from any phone and unlocks the report afterwards — so it belongs on screen
+/// while the ambulance is coming, not only in the confirmation that scrolled
+/// away. Tapping copies it.
+class _RequestCodeChip extends ConsumerWidget {
+  const _RequestCodeChip({required this.caseId});
+
+  final String caseId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final session = ref.watch(sessionProvider);
+    final code = session.caseId == caseId ? session.accessCode : null;
+    if (code == null || code.isEmpty) return const SizedBox.shrink();
+
+    return GestureDetector(
+      onTap: () async {
+        await Clipboard.setData(ClipboardData(text: code));
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Request code $code copied')),
+        );
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceTwo,
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: AppColors.borderGlass),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.tag_rounded, size: 16, color: AppColors.textSecondary),
+            const SizedBox(width: 6),
+            Text(code, style: AppTextStyles.caption),
+          ],
+        ),
       ),
     );
   }

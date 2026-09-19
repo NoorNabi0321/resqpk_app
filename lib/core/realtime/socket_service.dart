@@ -77,10 +77,14 @@ class SocketService {
     }
   }
 
-  Future<void> connect({String? userId}) async {
-    final token = await SecureStorage.getToken();
+  /// Connects as a signed-in user, or — for a patient with no account — with a
+  /// case token, which authenticates the socket for exactly one case. The
+  /// server places such a connection in that case's room and registers no role
+  /// handlers for it.
+  Future<void> connect({String? userId, String? caseToken}) async {
+    final token = caseToken ?? await SecureStorage.getToken();
     if (token == null || token.isEmpty) {
-      throw Exception('Not logged in');
+      throw Exception('No credentials to connect with');
     }
 
     // Tear down any previous socket (e.g. after switching accounts) so we don't

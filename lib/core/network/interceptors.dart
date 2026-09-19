@@ -6,6 +6,13 @@ import '../storage/secure_storage.dart';
 class AuthInterceptor extends Interceptor {
   @override
   void onRequest(RequestOptions options, RequestInterceptorHandler handler) async {
+    // A case-scoped call carries its own token (a patient with no account has
+    // nothing else), so never overwrite one the caller set.
+    if (options.headers.containsKey('Authorization')) {
+      handler.next(options);
+      return;
+    }
+
     final token = await SecureStorage.getToken();
     if (token != null && token.isNotEmpty) {
       options.headers['Authorization'] = 'Bearer $token';
@@ -15,7 +22,9 @@ class AuthInterceptor extends Interceptor {
 
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) async {
-    if (err.response?.statusCode == 401) {
+    // An expired case token says nothing about the signed-in user's session.
+    final caseScoped = err.requestOptions.extra['caseScoped'] == true;
+    if (err.response?.statusCode == 401 && !caseScoped) {
       // Token is invalid/expired. Clear it; the router's auth guard (D6) will
       // redirect to the login flow on the next navigation.
       await SecureStorage.deleteToken();

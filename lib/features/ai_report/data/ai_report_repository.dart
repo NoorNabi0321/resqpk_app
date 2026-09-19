@@ -7,6 +7,12 @@ import '../../../core/realtime/socket_service.dart';
 import 'models/ai_report_model.dart';
 
 class AIReportRepository {
+  /// A reporter with no account holds only a case token, so every read here
+  /// takes one optionally. Signed-in callers pass nothing and keep using their
+  /// own token, exactly as before.
+  Map<String, String>? _caseHeader(String? caseToken) =>
+      (caseToken == null || caseToken.isEmpty) ? null : {'Authorization': 'Bearer $caseToken'};
+
   // POST /api/ai/report — multipart (voice + images + text). Uses the raw Dio
   // instance because we need form-data with files and long timeouts.
   Future<AIReportModel> generateReport({
@@ -15,6 +21,7 @@ class AIReportRepository {
     String? textInput,
     List<String> imagePaths = const [],
     String language = 'auto',
+    String? caseToken,
   }) async {
     try {
       final formData = FormData.fromMap({
@@ -55,6 +62,10 @@ class AIReportRepository {
         options: Options(
           sendTimeout: const Duration(seconds: 60),
           receiveTimeout: const Duration(seconds: 120),
+          headers: _caseHeader(caseToken),
+          // Only a case-scoped call gets the flag; otherwise a genuine 401
+          // would stop clearing the signed-in user's expired token.
+          extra: _caseHeader(caseToken) == null ? null : const {'caseScoped': true},
         ),
       );
 
@@ -75,9 +86,9 @@ class AIReportRepository {
   }
 
   // GET /api/ai/report/:caseId — returns the report or null if not found.
-  Future<AIReportModel?> getReport(String caseId) async {
+  Future<AIReportModel?> getReport(String caseId, {String? caseToken}) async {
     try {
-      final res = await apiClient.get('/api/ai/report/$caseId');
+      final res = await apiClient.get('/api/ai/report/$caseId', caseToken: caseToken);
       final data = res['data'];
       if (data is! Map<String, dynamic>) return null;
       return AIReportModel.fromJson(data);
@@ -91,9 +102,9 @@ class AIReportRepository {
 
   /// GET /api/ai/report/:caseId/pdf — a freshly signed URL. Stored URLs expire
   /// after ~6 hours, so always mint a new one before opening the document.
-  Future<String?> getReportPdfUrl(String caseId) async {
+  Future<String?> getReportPdfUrl(String caseId, {String? caseToken}) async {
     try {
-      final res = await apiClient.get('/api/ai/report/$caseId/pdf');
+      final res = await apiClient.get('/api/ai/report/$caseId/pdf', caseToken: caseToken);
       final data = res['data'];
       if (data is Map) return data['pdfUrl']?.toString();
       return null;
@@ -132,8 +143,9 @@ class AIReportRepository {
   // Emits report updates as they arrive over the socket for this case.
   Stream<AIReportModel> watchReportStatus(
     String caseId,
-    SocketService socketService,
-  ) async* {
+    SocketService socketService, {
+    String? caseToken,
+  }) async* {
     await for (final evt in socketService.aiReportStream) {
       final evtCaseId = (evt['caseId'] ?? evt['case_id'])?.toString();
       if (evtCaseId != null && evtCaseId != caseId) continue;
@@ -143,7 +155,7 @@ class AIReportRepository {
           yield AIReportModel(caseId: caseId, generationStatus: 'processing');
           break;
         case 'report_ready':
-          final full = await getReport(caseId);
+          final full = await getReport(caseId, caseToken: caseToken);
           if (full != null) {
             yield full.copyWith(generationStatus: 'completed');
           } else {

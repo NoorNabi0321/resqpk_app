@@ -8,6 +8,8 @@ import 'package:record/record.dart';
 
 import '../../../core/realtime/realtime_provider.dart';
 import '../../../core/realtime/socket_service.dart';
+import '../../auth/providers/auth_provider.dart';
+import '../../sos/providers/session_provider.dart';
 import '../data/ai_report_repository.dart';
 import '../data/models/ai_report_model.dart';
 import '../data/models/recording_state_model.dart';
@@ -69,10 +71,19 @@ class AIReportState {
 }
 
 class AIReportNotifier extends StateNotifier<AIReportState> {
-  AIReportNotifier(this._repository, this._socketService) : super(const AIReportState());
+  AIReportNotifier(this._repository, this._socketService, this._ref)
+      : super(const AIReportState());
 
   final AIReportRepository _repository;
   final SocketService _socketService;
+  final Ref _ref;
+
+  /// A reporter with no account sends their case token instead of a login.
+  String? _caseToken(String caseId) => caseTokenFor(
+        _ref.read(sessionProvider),
+        signedIn: _ref.read(authProvider).isAuthenticated,
+        caseId: caseId,
+      );
   final AudioRecorder _audioRecorder = AudioRecorder();
   Timer? _durationTimer;
 
@@ -178,7 +189,9 @@ class AIReportNotifier extends StateNotifier<AIReportState> {
     );
 
     // Reflect live progress from the backend while we await the response.
-    final sub = _repository.watchReportStatus(caseId, _socketService).listen((r) {
+    final caseToken = _caseToken(caseId);
+    final sub =
+        _repository.watchReportStatus(caseId, _socketService, caseToken: caseToken).listen((r) {
       if (r.isProcessing) {
         state = state.copyWith(recordingStatus: RecordingStatus.processing);
       }
@@ -191,6 +204,7 @@ class AIReportNotifier extends StateNotifier<AIReportState> {
         textInput: state.textInput,
         imagePaths: state.selectedImages,
         language: state.selectedLanguage,
+        caseToken: caseToken,
       );
       state = state.copyWith(
         report: report,
@@ -229,5 +243,6 @@ final aiReportProvider = StateNotifierProvider<AIReportNotifier, AIReportState>(
   return AIReportNotifier(
     ref.read(aiReportRepositoryProvider),
     ref.read(socketServiceProvider),
+    ref,
   );
 });

@@ -9,6 +9,8 @@ import 'package:share_plus/share_plus.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_text_styles.dart';
+import '../../auth/providers/auth_provider.dart';
+import '../../sos/providers/session_provider.dart';
 import '../data/ai_report_repository.dart';
 import '../data/models/ai_report_model.dart';
 
@@ -62,7 +64,14 @@ class _ReportPdfScreenState extends ConsumerState<ReportPdfScreen> {
       // than telling the patient it failed.
       String? url;
       for (var attempt = 0; attempt < 6 && url == null; attempt++) {
-        url = await _repo.getReportPdfUrl(widget.caseId);
+        url = await _repo.getReportPdfUrl(
+          widget.caseId,
+          caseToken: caseTokenFor(
+            ref.read(sessionProvider),
+            signedIn: ref.read(authProvider).isAuthenticated,
+            caseId: widget.caseId,
+          ),
+        );
         if (url == null) await Future<void>.delayed(const Duration(seconds: 2));
         if (!mounted) return;
       }

@@ -20,7 +20,9 @@ import '../../../core/widgets/sos_button.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../camps/providers/camps_provider.dart';
 import '../../first_aid/providers/first_aid_provider.dart';
+import '../../sos/providers/session_provider.dart';
 import '../../sos/providers/sos_provider.dart';
+import '../../sos/widgets/reporter_phone_sheet.dart';
 import '../providers/home_providers.dart';
 
 /// Patient home — light, scrollable dashboard.
@@ -103,7 +105,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
         children: [
-          _Header(name: user?.fullName ?? 'Patient'),
+          // No account, no invented identity: the header shows a name only when
+          // there is a real one to show.
+          _Header(name: user?.fullName ?? ref.watch(sessionProvider).reporterName),
           const SizedBox(height: 14),
           _LocationBanner(isOnline: isOnline),
           const SizedBox(height: 22),
@@ -125,7 +129,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
 // --- Header ------------------------------------------------------------------
 
 class _Header extends StatelessWidget {
-  final String name;
+  final String? name;
   const _Header({required this.name});
 
   @override
@@ -174,39 +178,41 @@ class _Header extends StatelessWidget {
             const SnackBar(content: Text('Alerts are coming soon')),
           ),
         ),
-        const SizedBox(width: 10),
-        Flexible(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 13.5,
-                  fontWeight: FontWeight.w700,
-                  color: AppLight.textPrimary,
+        if (name != null && name!.isNotEmpty) ...[
+          const SizedBox(width: 10),
+          Flexible(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  name!,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w700,
+                    color: AppLight.textPrimary,
+                  ),
                 ),
-              ),
-              Text('Patient', style: TextStyle(fontSize: 11.5, color: AppLight.blue)),
-            ],
-          ),
-        ),
-        const SizedBox(width: 8),
-        CircleAvatar(
-          radius: 20,
-          backgroundColor: AppLight.blueTint,
-          child: Text(
-            name.isNotEmpty ? name[0].toUpperCase() : '?',
-            style: TextStyle(
-              color: AppLight.blue,
-              fontWeight: FontWeight.bold,
-              fontSize: 16,
+                Text('Patient', style: TextStyle(fontSize: 11.5, color: AppLight.blue)),
+              ],
             ),
           ),
-        ),
+          const SizedBox(width: 8),
+          CircleAvatar(
+            radius: 20,
+            backgroundColor: AppLight.blueTint,
+            child: Text(
+              name![0].toUpperCase(),
+              style: TextStyle(
+                color: AppLight.blue,
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+              ),
+            ),
+          ),
+        ],
       ],
     );
   }
@@ -878,6 +884,23 @@ class _SosSectionState extends ConsumerState<_SosSection>
     }
   }
 
+  /// A reporter with no account must leave a number the crew can ring — the
+  /// backend refuses a case nobody can be called back on. Asked once, on the
+  /// first emergency, and never again.
+  bool get _needsPhone {
+    if (ref.read(authProvider).isAuthenticated) return false;
+    return !ref.read(sessionProvider).hasPhone;
+  }
+
+  /// The sheet's own button says "Save and call ambulance", so saving is the
+  /// confirmation — making someone hold the button again after that would read
+  /// as the app having ignored them.
+  Future<void> _askForPhoneThenTrigger() async {
+    final saved = await showReporterPhoneSheet(context);
+    if (!saved || !mounted) return;
+    await ref.read(sosProvider.notifier).triggerNow();
+  }
+
   SosButtonPhase get _phase {
     final s = widget.state;
     if (s.status == SOSStatus.searching) return SosButtonPhase.searching;
@@ -905,6 +928,10 @@ class _SosSectionState extends ConsumerState<_SosSection>
             phase: _phase,
             progress: _hold.value,
             onHoldStart: () {
+              if (_needsPhone) {
+                _askForPhoneThenTrigger();
+                return;
+              }
               _hold.forward(from: 0);
               ref.read(sosProvider.notifier).startSOSCountdown();
             },

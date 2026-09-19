@@ -5,6 +5,8 @@ import '../../../core/location/location_provider.dart';
 import '../../../core/location/location_service.dart';
 import '../../../core/realtime/realtime_provider.dart';
 import '../../../core/realtime/socket_service.dart';
+import '../../auth/providers/auth_provider.dart';
+import 'session_provider.dart';
 import '../data/sos_repository.dart';
 import '../data/models/emergency_case_model.dart';
 import '../data/models/eta_update_model.dart';
@@ -78,6 +80,9 @@ class SOSState {
   }
 }
 
+/// Nothing left to track once a case reaches one of these.
+const Set<String> _terminalStatuses = {'completed', 'cancelled'};
+
 double? _toD(dynamic v) {
   if (v == null) return null;
   if (v is num) return v.toDouble();
@@ -88,12 +93,13 @@ class SOSNotifier extends StateNotifier<SOSState> {
   final SOSRepository _repo;
   final SocketService _socketService;
   final LocationService _locationService;
+  final Ref _ref;
 
   Timer? _countdownTimer;
   Timer? _locationUpdateTimer;
   StreamSubscription<Map<String, dynamic>>? _caseSub;
 
-  SOSNotifier(this._repo, this._socketService, this._locationService)
+  SOSNotifier(this._repo, this._socketService, this._locationService, this._ref)
       : super(const SOSState());
 
   /// How long the SOS button must be held.
@@ -153,19 +159,42 @@ class SOSNotifier extends StateNotifier<SOSState> {
         return;
       }
 
-      final created = await _repo.triggerSOS(
+      // Someone in an emergency is never sent to a registration screen: the
+      // request goes out with a callback number, and the case token that comes
+      // back is what lets this device follow the ambulance.
+      final signedIn = _ref.read(authProvider).isAuthenticated;
+      final session = _ref.read(sessionProvider);
+
+      final result = await _repo.triggerSOS(
         lat: pos.latitude,
         lng: pos.longitude,
         accuracy: pos.accuracy,
+        reporterPhone: signedIn ? null : session.reporterPhone,
+        reporterName: signedIn ? null : session.reporterName,
       );
+      final created = result.emergencyCase;
 
-      // Hospital decisions are broadcast to the case room only (driver
-      // assignment also reaches the patient's personal room), so retry once if
-      // the socket was still connecting when the SOS fired.
-      var joined = await _socketService.joinCaseRoom(created.id);
-      if (joined['success'] != true) {
-        await Future<void>.delayed(const Duration(seconds: 2));
-        joined = await _socketService.joinCaseRoom(created.id);
+      if (!signedIn && result.caseToken != null) {
+        await _ref.read(sessionProvider.notifier).startCase(
+              caseId: created.id,
+              caseToken: result.caseToken!,
+              accessCode: result.accessCode,
+              caseNumber: created.caseNumber,
+              trackingUrl: result.trackingUrl,
+            );
+        // The socket reconnects with the case token, and the server puts a
+        // case-scoped connection straight into its own room — there is nothing
+        // to join by hand.
+        await _ref.read(socketConnectionProvider.future);
+      } else {
+        // Hospital decisions are broadcast to the case room only (driver
+        // assignment also reaches the patient's personal room), so retry once if
+        // the socket was still connecting when the SOS fired.
+        var joined = await _socketService.joinCaseRoom(created.id);
+        if (joined['success'] != true) {
+          await Future<void>.delayed(const Duration(seconds: 2));
+          joined = await _socketService.joinCaseRoom(created.id);
+        }
       }
       _listenToSocketEvents();
 
@@ -288,6 +317,7 @@ class SOSNotifier extends StateNotifier<SOSState> {
           break;
         case 'cancelled':
           _cleanup();
+          _forgetAnonymousCase();
           state = const SOSState(status: SOSStatus.cancelled);
           break;
         default:
@@ -311,9 +341,18 @@ class SOSNotifier extends StateNotifier<SOSState> {
         final id = state.activeCaseId;
         if (id != null) _socketService.leaveCaseRoom(id);
         _cleanup();
+        _forgetAnonymousCase();
         state = const SOSState();
       }
     });
+  }
+
+  /// Drops the live case token once the case is over. The request itself stays
+  /// in this device's history, so the report can still be opened by its code.
+  void _forgetAnonymousCase() {
+    if (_ref.read(authProvider).isAuthenticated) return;
+    if (!_ref.read(sessionProvider).hasActiveCase) return;
+    _ref.read(sessionProvider.notifier).endCase();
   }
 
   // Update ETA from the eta:update stream (forwarded by etaListenerProvider).
@@ -324,6 +363,61 @@ class SOSNotifier extends StateNotifier<SOSState> {
         estimatedDriverArrivalSeconds: eta.durationSeconds,
       ),
     );
+  }
+
+  /// The stored token for this case, when it belongs to a patient with no
+  /// account. Null for a signed-in user, whose own JWT already covers it.
+  String? _caseTokenFor(String caseId) => caseTokenFor(
+        _ref.read(sessionProvider),
+        signedIn: _ref.read(authProvider).isAuthenticated,
+        caseId: caseId,
+      );
+
+  /// Reaches a request by the code printed on screen or sent over WhatsApp —
+  /// from a second phone, or after clearing the app's data. The token comes
+  /// back fresh, so the code alone is enough.
+  Future<({String caseId, String status})> openByAccessCode(String code) async {
+    final normalized = code.trim().toUpperCase();
+    final found = await _repo.lookupByAccessCode(normalized);
+
+    await _ref.read(sessionProvider.notifier).adoptCase(
+          caseId: found.caseId,
+          caseToken: found.caseToken,
+          accessCode: normalized,
+          caseNumber: found.caseNumber,
+        );
+
+    // A finished request keeps its token — that is what opens the report — but
+    // there is nothing left to track.
+    if (!_terminalStatuses.contains(found.status)) {
+      _cleanup();
+      state = const SOSState();
+      await restoreFromSession();
+    }
+    return (caseId: found.caseId, status: found.status);
+  }
+
+  /// Picks the case saved on this device back up after a restart — a force-close
+  /// during an emergency must not lose the ambulance on its way.
+  Future<void> restoreFromSession() async {
+    if (state.activeCaseId != null) return;
+    await _ref.read(sessionProvider.notifier).ensureLoaded();
+    final session = _ref.read(sessionProvider);
+    if (!session.hasActiveCase) return;
+
+    try {
+      final activeCase = await _repo.getCaseDetails(
+        session.caseId!,
+        caseToken: session.caseToken,
+      );
+      if (_terminalStatuses.contains(activeCase.status)) {
+        await _ref.read(sessionProvider.notifier).endCase();
+        return;
+      }
+      await restoreActiveCase(activeCase);
+    } catch (_) {
+      // Offline, or the token has expired — the SOS button still works.
+    }
   }
 
   /// Rehydrates state for a case that was already running when the app was
@@ -348,7 +442,13 @@ class SOSNotifier extends StateNotifier<SOSState> {
     );
 
     try {
-      await _socketService.joinCaseRoom(activeCase.id);
+      // A case-scoped socket is already in its room; only an account socket
+      // has to ask to join.
+      if (_caseTokenFor(activeCase.id) == null) {
+        await _socketService.joinCaseRoom(activeCase.id);
+      } else {
+        await _ref.read(socketConnectionProvider.future);
+      }
       _listenToSocketEvents();
       if (activeCase.driverId != null) _startPatientLocationUpdates();
     } catch (_) {
@@ -373,6 +473,15 @@ class SOSNotifier extends StateNotifier<SOSState> {
     );
   }
 
+  /// Sends the emergency without the three-second hold. Used right after the
+  /// callback-number sheet, where saving is itself the deliberate confirmation
+  /// the hold exists to provide.
+  Future<void> triggerNow() async {
+    if (state.activeCaseId != null) return;
+    _countdownTimer?.cancel();
+    await _triggerSOS();
+  }
+
   // Re-trigger a fresh SOS (e.g. from the No Driver Found screen).
   Future<void> retry() async {
     _cleanup();
@@ -394,12 +503,13 @@ class SOSNotifier extends StateNotifier<SOSState> {
     final id = state.activeCaseId;
     if (id == null) return;
     try {
-      await _repo.cancelSOS(id, reason: 'changed_mind');
+      await _repo.cancelSOS(id, reason: 'changed_mind', caseToken: _caseTokenFor(id));
     } catch (_) {
       // Cancel is best-effort from the client's side.
     }
     _socketService.leaveCaseRoom(id);
     _cleanup();
+    _forgetAnonymousCase();
     state = const SOSState();
   }
 
@@ -424,6 +534,7 @@ final sosProvider = StateNotifierProvider<SOSNotifier, SOSState>((ref) {
     ref.read(sosRepositoryProvider),
     ref.read(socketServiceProvider),
     ref.read(locationServiceProvider),
+    ref,
   );
 });
 

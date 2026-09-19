@@ -16,6 +16,7 @@ import '../../features/home/screens/home_screen.dart';
 import '../../features/more/screens/more_screen.dart';
 import '../../features/driver/screens/driver_home_screen.dart';
 import '../../features/driver/screens/driver_navigation_screen.dart';
+import '../../features/sos/screens/my_requests_screen.dart';
 import '../../features/sos/screens/tracking_screen.dart';
 import '../../features/sos/screens/no_driver_screen.dart';
 import '../../features/ai_report/screens/ai_report_screen.dart';
@@ -48,6 +49,7 @@ class Routes {
   static const String more = '/more';
 
   // Takeovers — full screen, outside the tabs
+  static const String myRequests = '/my-requests';
   static const String tracking = '/tracking';
   static const String noDriver = '/no-driver';
   static const String aiReport = '/ai-report';
@@ -59,14 +61,18 @@ class Routes {
   static const String profile = '/profile';
 }
 
-// Routes reachable without being authenticated.
-const Set<String> _publicRoutes = {
-  Routes.splash,
-  Routes.onboarding,
-  Routes.roleSelect,
-  Routes.login,
-  Routes.patientRegister,
-  Routes.driverRegister,
+/// Routes that still require an account.
+///
+/// Everything else is open. A patient never signs in: the SOS button, tracking,
+/// first aid and camps all work on a fresh install, because asking someone to
+/// register while they are looking at a casualty is the one thing this app must
+/// never do. Drivers and hospital staff still sign in — they are accountable for
+/// what they do in the system, and their screens are useless without an identity.
+const Set<String> _guardedRoutes = {
+  Routes.driverHome,
+  Routes.driverNavigation,
+  Routes.profile,
+  Routes.medicalProfile,
 };
 
 /// Fade + scale transition for takeover routes.
@@ -106,10 +112,6 @@ final appRouter = GoRouter(
   initialLocation: Routes.splash,
   // Auth guard reads SecureStorage directly (not the provider) to avoid
   // rebuild loops during navigation.
-  //
-  // The patient tabs are still guarded today because SOS needs an account.
-  // They open up when the anonymous flow lands (Plan 6 §6); after that only the
-  // driver routes keep a guard.
   redirect: (context, state) async {
     final token = await SecureStorage.getToken();
     bool loggedIn = false;
@@ -123,7 +125,7 @@ final appRouter = GoRouter(
 
     final loc = state.matchedLocation;
 
-    if (!loggedIn && !_publicRoutes.contains(loc)) {
+    if (!loggedIn && _guardedRoutes.contains(loc)) {
       return Routes.roleSelect;
     }
 
@@ -206,6 +208,7 @@ final appRouter = GoRouter(
     GoRoute(path: Routes.profile, pageBuilder: (c, s) => _page(const ProfileScreen())),
 
     // --- Takeovers: an emergency owns the whole screen ----------------------
+    GoRoute(path: Routes.myRequests, pageBuilder: (c, s) => _page(const MyRequestsScreen())),
     GoRoute(path: Routes.tracking, pageBuilder: (c, s) => _page(const TrackingScreen())),
     GoRoute(path: Routes.noDriver, pageBuilder: (c, s) => _page(const NoDriverScreen())),
     GoRoute(

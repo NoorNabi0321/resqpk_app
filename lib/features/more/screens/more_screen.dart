@@ -28,6 +28,15 @@ class MoreScreen extends ConsumerWidget {
           Text('More', style: ResqType.display()),
           const SizedBox(height: Resq.space5),
 
+          // First, because it is the one thing a patient with no account comes
+          // to this tab for.
+          _Tile(
+            icon: Icons.receipt_long_rounded,
+            label: 'My requests',
+            subtitle: 'Track or reopen by request code',
+            onTap: () => context.push(Routes.myRequests),
+          ),
+
           if (user != null) ...[
             _Tile(
               icon: Icons.person_rounded,

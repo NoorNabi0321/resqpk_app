@@ -5,12 +5,26 @@ import 'models/emergency_case_model.dart';
 import 'models/quick_message_model.dart';
 
 class SOSRepository {
-  // POST /api/sos/trigger — returns a (partial) case with id/status/hospital.
-  Future<EmergencyCaseModel> triggerSOS({
+  /// POST /api/sos/trigger — the case, plus the credentials an anonymous
+  /// reporter needs afterwards.
+  ///
+  /// No account is required: someone in an emergency is never asked to
+  /// register. A callback number is sent instead, so the crew can phone ahead
+  /// when an address is vague.
+  Future<
+      ({
+        EmergencyCaseModel emergencyCase,
+        String? accessCode,
+        String? caseToken,
+        String? trackingUrl,
+      })> triggerSOS({
     required double lat,
     required double lng,
     double? accuracy,
     String? address,
+    String? reporterPhone,
+    String? reporterName,
+    String reportedFor = 'self',
   }) async {
     try {
       final res = await apiClient.post('/api/sos/trigger', data: {
@@ -18,17 +32,31 @@ class SOSRepository {
         'lng': lng,
         if (accuracy != null) 'accuracy': accuracy,
         if (address != null && address.isNotEmpty) 'address': address,
+        if (reporterPhone != null && reporterPhone.isNotEmpty) 'reporterPhone': reporterPhone,
+        if (reporterName != null && reporterName.isNotEmpty) 'reporterName': reporterName,
+        'reportedFor': reportedFor,
+        'channel': 'app',
       });
-      return EmergencyCaseModel.fromJson(_data(res));
+      final data = _data(res);
+      return (
+        emergencyCase: EmergencyCaseModel.fromJson(data),
+        accessCode: data['accessCode']?.toString(),
+        caseToken: data['caseToken']?.toString(),
+        trackingUrl: data['trackingUrl']?.toString(),
+      );
     } catch (e) {
       throw Exception(_err(e));
     }
   }
 
   // POST /api/sos/cancel
-  Future<void> cancelSOS(String caseId, {String reason = 'false_alarm'}) async {
+  Future<void> cancelSOS(String caseId, {String reason = 'false_alarm', String? caseToken}) async {
     try {
-      await apiClient.post('/api/sos/cancel', data: {'caseId': caseId, 'reason': reason});
+      await apiClient.post(
+        '/api/sos/cancel',
+        data: {'caseId': caseId, 'reason': reason},
+        caseToken: caseToken,
+      );
     } catch (e) {
       throw Exception(_err(e));
     }
@@ -57,9 +85,9 @@ class SOSRepository {
   }
 
   // GET /api/cases/:id → full case with joined data
-  Future<EmergencyCaseModel> getCaseDetails(String caseId) async {
+  Future<EmergencyCaseModel> getCaseDetails(String caseId, {String? caseToken}) async {
     try {
-      final res = await apiClient.get('/api/cases/$caseId');
+      final res = await apiClient.get('/api/cases/$caseId', caseToken: caseToken);
       return EmergencyCaseModel.fromJson(_data(res));
     } catch (e) {
       throw Exception(_err(e));
@@ -68,9 +96,9 @@ class SOSRepository {
 
   // GET /api/cases/:id/route → road-following polyline for the current leg.
   // Returns { leg, coordinates: [{lat,lng},...], durationSeconds, distanceMeters }
-  Future<Map<String, dynamic>> getCaseRoute(String caseId) async {
+  Future<Map<String, dynamic>> getCaseRoute(String caseId, {String? caseToken}) async {
     try {
-      final res = await apiClient.get('/api/cases/$caseId/route');
+      final res = await apiClient.get('/api/cases/$caseId/route', caseToken: caseToken);
       return _data(res);
     } catch (e) {
       throw Exception(_err(e));
@@ -172,6 +200,26 @@ class SOSRepository {
             .toList();
       }
       return [];
+    } catch (e) {
+      throw Exception(_err(e));
+    }
+  }
+
+  /// POST /api/cases/lookup — a request code typed by hand, in exchange for a
+  /// token for that case. How someone reaches a request raised on another
+  /// device, or over WhatsApp, without an account.
+  Future<({String caseId, String caseNumber, String status, String caseToken})> lookupByAccessCode(
+    String accessCode,
+  ) async {
+    try {
+      final res = await apiClient.post('/api/cases/lookup', data: {'accessCode': accessCode});
+      final data = _data(res);
+      return (
+        caseId: data['caseId']?.toString() ?? '',
+        caseNumber: data['caseNumber']?.toString() ?? '',
+        status: data['status']?.toString() ?? 'pending',
+        caseToken: data['caseToken']?.toString() ?? '',
+      );
     } catch (e) {
       throw Exception(_err(e));
     }
