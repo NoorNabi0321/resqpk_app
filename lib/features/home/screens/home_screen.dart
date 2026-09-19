@@ -14,7 +14,6 @@ import '../../../core/location/gps_persistence_provider.dart';
 import '../../../core/map/resqpk_map.dart';
 import '../../../core/realtime/realtime_provider.dart';
 import '../../../core/router/app_router.dart';
-import '../../../core/widgets/back_guard.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../camps/providers/camps_provider.dart';
 import '../../first_aid/providers/first_aid_provider.dart';
@@ -101,38 +100,26 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     final locationService = ref.read(locationServiceProvider);
     final position = positionAsync.asData?.value ?? locationService.lastPosition;
 
-    return ExitGuard(
-      child: Scaffold(
-        backgroundColor: AppLight.background,
-        drawer: _AppDrawer(name: user?.fullName ?? 'Patient'),
-        body: SafeArea(
-          bottom: false,
-          child: Column(
-            children: [
-              Expanded(
-                child: ListView(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                  children: [
-                    _Header(name: user?.fullName ?? 'Patient'),
-                    const SizedBox(height: 14),
-                    _LocationBanner(isOnline: isOnline),
-                    const SizedBox(height: 14),
-                    _MapCard(lat: position?.latitude, lng: position?.longitude),
-                    const SizedBox(height: 14),
-                    const _NearbyHospitals(),
-                    const SizedBox(height: 14),
-                    _SosBanner(state: sos, pulse: _pulseController),
-                    const SizedBox(height: 14),
-                    const _CampsCard(),
-                    const SizedBox(height: 14),
-                    const _QuickActions(),
-                  ],
-                ),
-              ),
-              const _BottomNav(),
-            ],
-          ),
-        ),
+    // No Scaffold, drawer or bottom bar here any more: AppShell owns the page
+    // chrome, so this screen is only its content. The drawer duplicated the
+    // tabs and hid the driver entry behind a hamburger menu.
+    return SafeArea(
+      bottom: false,
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+        children: [
+          _Header(name: user?.fullName ?? 'Patient'),
+          const SizedBox(height: 14),
+          _LocationBanner(isOnline: isOnline),
+          const SizedBox(height: 14),
+          _MapCard(lat: position?.latitude, lng: position?.longitude),
+          const SizedBox(height: 14),
+          const _NearbyHospitals(),
+          const SizedBox(height: 14),
+          _SosBanner(state: sos, pulse: _pulseController),
+          const SizedBox(height: 14),
+          const _CampsCard(),
+        ],
       ),
     );
   }
@@ -148,11 +135,6 @@ class _Header extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        _CircleButton(
-          icon: Icons.menu,
-          onTap: () => Scaffold.of(context).openDrawer(),
-        ),
-        const SizedBox(width: 12),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -989,90 +971,6 @@ class _CampsCard extends ConsumerWidget {
 
 // --- Quick actions -----------------------------------------------------------
 
-class _QuickActions extends StatelessWidget {
-  const _QuickActions();
-
-  @override
-  Widget build(BuildContext context) {
-    final items = [
-      (
-        icon: Icons.assignment_ind,
-        label: 'Medical Profile',
-        tint: AppLight.blueTint,
-        color: AppLight.blue,
-        onTap: () => context.push(Routes.medicalProfile),
-      ),
-      (
-        icon: Icons.favorite,
-        label: 'First Aid Guide',
-        tint: const Color(0xFFFDE8EA),
-        color: AppLight.red,
-        onTap: () => context.push(Routes.firstAid),
-      ),
-      (
-        icon: Icons.groups,
-        label: 'My Contacts',
-        tint: AppLight.amberTint,
-        color: AppLight.amber,
-        onTap: () => context.push(Routes.profile),
-      ),
-      (
-        icon: Icons.shield,
-        label: 'Safety Tips',
-        tint: AppLight.tealTint,
-        color: const Color(0xFF0D9488),
-        onTap: () => context.push(Routes.firstAid),
-      ),
-    ];
-
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
-      decoration: BoxDecoration(
-        color: AppLight.card,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppLight.border),
-      ),
-      child: Row(
-        children: items
-            .map(
-              (item) => Expanded(
-                child: GestureDetector(
-                  onTap: item.onTap,
-                  behavior: HitTestBehavior.opaque,
-                  child: Column(
-                    children: [
-                      Container(
-                        width: 44,
-                        height: 44,
-                        decoration: BoxDecoration(
-                          color: item.tint,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Icon(item.icon, color: item.color, size: 21),
-                      ),
-                      const SizedBox(height: 7),
-                      Text(
-                        item.label,
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: AppLight.textPrimary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            )
-            .toList(),
-      ),
-    );
-  }
-}
-
-// --- Shared card shell -------------------------------------------------------
-
 class _SectionCard extends StatelessWidget {
   final String title;
   final Widget child;
@@ -1122,186 +1020,3 @@ class _SectionCard extends StatelessWidget {
 
 // --- Drawer ------------------------------------------------------------------
 
-class _AppDrawer extends ConsumerWidget {
-  final String name;
-  const _AppDrawer({required this.name});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    Widget tile(IconData icon, String label, VoidCallback onTap) => ListTile(
-          leading: Icon(icon, color: AppLight.textSecondary, size: 21),
-          title: Text(label,
-              style: TextStyle(fontSize: 14.5, color: AppLight.textPrimary)),
-          onTap: onTap,
-        );
-
-    return Drawer(
-      backgroundColor: AppLight.card,
-      child: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
-              child: Row(
-                children: [
-                  CircleAvatar(
-                    radius: 24,
-                    backgroundColor: AppLight.blueTint,
-                    child: Text(
-                      name.isNotEmpty ? name[0].toUpperCase() : '?',
-                      style: TextStyle(
-                          color: AppLight.blue, fontWeight: FontWeight.bold, fontSize: 19),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(name,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w700,
-                              color: AppLight.textPrimary,
-                            )),
-                        Text('Patient',
-                            style: TextStyle(fontSize: 12.5, color: AppLight.blue)),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const Divider(height: 1),
-            tile(Icons.person, 'Profile', () {
-              Navigator.pop(context);
-              context.push(Routes.profile);
-            }),
-            tile(Icons.assignment_ind, 'Medical Profile', () {
-              Navigator.pop(context);
-              context.push(Routes.medicalProfile);
-            }),
-            tile(Icons.favorite, 'First Aid Guide', () {
-              Navigator.pop(context);
-              context.push(Routes.firstAid);
-            }),
-            tile(Icons.medical_services, 'Nearby Camps', () {
-              Navigator.pop(context);
-              context.push(Routes.camps);
-            }),
-            const Spacer(),
-            const Divider(height: 1),
-            tile(Icons.logout, 'Log out', () async {
-              Navigator.pop(context);
-              await ref.read(authProvider.notifier).logout();
-              if (context.mounted) context.go(Routes.roleSelect);
-            }),
-            const SizedBox(height: 8),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// --- Bottom nav --------------------------------------------------------------
-
-class _BottomNav extends ConsumerWidget {
-  const _BottomNav();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final hasActiveCase = ref.watch(sosProvider).activeCaseId != null;
-
-    void notBuilt(String what) => ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('$what is coming soon')),
-        );
-
-    return Container(
-      padding: EdgeInsets.only(
-        top: 8,
-        bottom: 8 + MediaQuery.paddingOf(context).bottom,
-        left: 8,
-        right: 8,
-      ),
-      decoration: BoxDecoration(
-        color: AppLight.card,
-        border: Border(top: BorderSide(color: AppLight.border)),
-      ),
-      child: Row(
-        children: [
-          _NavItem(icon: Icons.home_rounded, label: 'Home', active: true, onTap: () {}),
-          _NavItem(
-            icon: Icons.location_on_rounded,
-            label: 'Tracking',
-            onTap: () {
-              if (hasActiveCase) {
-                context.go(Routes.tracking);
-              } else {
-                notBuilt('Tracking is available during an emergency — it');
-              }
-            },
-          ),
-          _NavItem(
-            icon: Icons.history_rounded,
-            label: 'History',
-            onTap: () => notBuilt('Case history'),
-          ),
-          _NavItem(
-            icon: Icons.notifications_rounded,
-            label: 'Alerts',
-            onTap: () => notBuilt('Alerts'),
-          ),
-          _NavItem(
-            icon: Icons.person_rounded,
-            label: 'Profile',
-            onTap: () => context.push(Routes.profile),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _NavItem extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final bool active;
-  final VoidCallback onTap;
-
-  const _NavItem({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-    this.active = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final color = active ? AppLight.red : AppLight.textFaint;
-    return Expanded(
-      child: GestureDetector(
-        onTap: onTap,
-        behavior: HitTestBehavior.opaque,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, color: color, size: 23),
-            const SizedBox(height: 3),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 11,
-                color: color,
-                fontWeight: active ? FontWeight.w700 : FontWeight.w500,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}

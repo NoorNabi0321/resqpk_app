@@ -10,8 +10,19 @@ class ApiConstants {
   static const String baseUrl = 'http://127.0.0.1:3000'; // via `adb reverse tcp:3000 tcp:3000`
   static const String productionUrl = 'https://resqpk-backend.onrender.com';
 
-  /// Dev build → local backend; release build → Render.
-  static String get currentBaseUrl => kReleaseMode ? productionUrl : baseUrl;
+  /// Set at build time to point any build at a specific backend:
+  ///   flutter build apk --dart-define=RESQPK_API=https://resqpk-backend.onrender.com
+  ///
+  /// Without it a debug build talks to 127.0.0.1, which on a phone is the phone
+  /// itself — the cause of "connection refused" when a debug APK is installed
+  /// on a real device rather than run through `adb reverse`.
+  static const String _apiOverride = String.fromEnvironment('RESQPK_API');
+
+  /// Override if given, else release → Render, debug → local backend.
+  static String get currentBaseUrl {
+    if (_apiOverride.isNotEmpty) return _apiOverride;
+    return kReleaseMode ? productionUrl : baseUrl;
+  }
 
   // Auth endpoints
   static const String patientRegister = '/api/auth/patient/register';

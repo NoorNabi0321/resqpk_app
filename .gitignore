@@ -43,3 +43,6 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Source artwork exports — the app bundles the WebP copies in assets/
+/design_assets/

@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:jwt_decoder/jwt_decoder.dart';
 
 import '../storage/secure_storage.dart';
+import 'app_shell.dart';
 import '../../features/auth/screens/splash_screen.dart';
 import '../../features/auth/screens/onboarding_screen.dart';
 import '../../features/auth/screens/role_select_screen.dart';
@@ -12,6 +13,7 @@ import '../../features/auth/screens/driver_register_screen.dart';
 import '../../features/auth/screens/login_screen.dart';
 import '../../features/auth/screens/medical_profile_screen.dart';
 import '../../features/home/screens/home_screen.dart';
+import '../../features/more/screens/more_screen.dart';
 import '../../features/driver/screens/driver_home_screen.dart';
 import '../../features/driver/screens/driver_navigation_screen.dart';
 import '../../features/sos/screens/tracking_screen.dart';
@@ -37,17 +39,24 @@ class Routes {
   static const String driverRegister = '/register/driver';
   static const String login = '/login';
   static const String medicalProfile = '/medical-profile';
+
+  // Shell tabs
   static const String home = '/home';
-  static const String tracking = '/tracking';
-  static const String noDriver = '/no-driver';
-  static const String driverHome = '/driver-home';
-  static const String driverNavigation = '/driver-navigation';
-  static const String aiReport = '/ai-report';
   static const String firstAid = '/first-aid';
   static const String guideDetail = '/first-aid/guide';
-  static const String profile = '/profile';
   static const String camps = '/camps';
+  static const String more = '/more';
+
+  // Takeovers — full screen, outside the tabs
+  static const String tracking = '/tracking';
+  static const String noDriver = '/no-driver';
+  static const String aiReport = '/ai-report';
   static const String reportPdf = '/ai-report/pdf';
+
+  // Driver
+  static const String driverHome = '/driver-home';
+  static const String driverNavigation = '/driver-navigation';
+  static const String profile = '/profile';
 }
 
 // Routes reachable without being authenticated.
@@ -60,16 +69,16 @@ const Set<String> _publicRoutes = {
   Routes.driverRegister,
 };
 
-// Fade + scale transition applied to every route.
+/// Fade + scale transition for takeover routes.
 CustomTransitionPage<void> _page(Widget child) {
   return CustomTransitionPage<void>(
-    transitionDuration: const Duration(milliseconds: 280),
+    transitionDuration: const Duration(milliseconds: 240),
     child: child,
     transitionsBuilder: (context, animation, secondaryAnimation, child) {
       return FadeTransition(
         opacity: animation,
         child: ScaleTransition(
-          scale: Tween<double>(begin: 0.95, end: 1.0).animate(
+          scale: Tween<double>(begin: 0.97, end: 1.0).animate(
             CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
           ),
           child: child,
@@ -78,6 +87,10 @@ CustomTransitionPage<void> _page(Widget child) {
     },
   );
 }
+
+/// Tabs switch without a transition — the shell swaps them instantly, and an
+/// animation on top of that reads as lag.
+NoTransitionPage<void> _tab(Widget child) => NoTransitionPage<void>(child: child);
 
 Future<String?> _storedRole() async {
   final data = await SecureStorage.getUserData();
@@ -93,6 +106,10 @@ final appRouter = GoRouter(
   initialLocation: Routes.splash,
   // Auth guard reads SecureStorage directly (not the provider) to avoid
   // rebuild loops during navigation.
+  //
+  // The patient tabs are still guarded today because SOS needs an account.
+  // They open up when the anonymous flow lands (Plan 6 §6); after that only the
+  // driver routes keep a guard.
   redirect: (context, state) async {
     final token = await SecureStorage.getToken();
     bool loggedIn = false;
@@ -106,12 +123,10 @@ final appRouter = GoRouter(
 
     final loc = state.matchedLocation;
 
-    // Logged out on a protected route → role select.
     if (!loggedIn && !_publicRoutes.contains(loc)) {
       return Routes.roleSelect;
     }
 
-    // Logged in but on a login/register page → role-appropriate home.
     if (loggedIn &&
         (loc == Routes.login ||
             loc == Routes.patientRegister ||
@@ -123,9 +138,59 @@ final appRouter = GoRouter(
     return null;
   },
   routes: [
+    // --- The patient shell: four tabs, each keeping its own stack -----------
+    StatefulShellRoute.indexedStack(
+      builder: (context, state, navigationShell) => AppShell(navigationShell: navigationShell),
+      branches: [
+        StatefulShellBranch(
+          routes: [GoRoute(path: Routes.home, pageBuilder: (c, s) => _tab(const HomeScreen()))],
+        ),
+        StatefulShellBranch(
+          routes: [
+            GoRoute(
+              path: Routes.firstAid,
+              pageBuilder: (c, s) => _tab(const FirstAidScreen()),
+              routes: [
+                // Nested, so the tabs stay visible and back returns to the list.
+                GoRoute(
+                  path: 'guide',
+                  pageBuilder: (c, s) =>
+                      _page(GuideDetailScreen(guide: s.extra as FirstAidGuideModel)),
+                ),
+              ],
+            ),
+          ],
+        ),
+        StatefulShellBranch(
+          routes: [
+            GoRoute(
+              path: Routes.camps,
+              pageBuilder: (c, s) => _tab(const CampsScreen()),
+              routes: [
+                GoRoute(
+                  path: ':id',
+                  pageBuilder: (c, s) => _page(
+                    CampDetailScreen(
+                      campId: s.pathParameters['id'] ?? '',
+                      camp: s.extra as CampModel?,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+        StatefulShellBranch(
+          routes: [GoRoute(path: Routes.more, pageBuilder: (c, s) => _tab(const MoreScreen()))],
+        ),
+      ],
+    ),
+
+    // --- Entry ---------------------------------------------------------------
     GoRoute(path: Routes.splash, pageBuilder: (c, s) => _page(const SplashScreen())),
     GoRoute(path: Routes.onboarding, pageBuilder: (c, s) => _page(const OnboardingScreen())),
     GoRoute(path: Routes.roleSelect, pageBuilder: (c, s) => _page(const RoleSelectScreen())),
+    GoRoute(path: Routes.login, pageBuilder: (c, s) => _page(const LoginScreen())),
     GoRoute(
       path: Routes.patientRegister,
       pageBuilder: (c, s) => _page(const PatientRegisterScreen()),
@@ -134,22 +199,15 @@ final appRouter = GoRouter(
       path: Routes.driverRegister,
       pageBuilder: (c, s) => _page(const DriverRegisterScreen()),
     ),
-    GoRoute(path: Routes.login, pageBuilder: (c, s) => _page(const LoginScreen())),
     GoRoute(
       path: Routes.medicalProfile,
       pageBuilder: (c, s) => _page(const MedicalProfileScreen()),
     ),
-    GoRoute(path: Routes.home, pageBuilder: (c, s) => _page(const HomeScreen())),
+    GoRoute(path: Routes.profile, pageBuilder: (c, s) => _page(const ProfileScreen())),
+
+    // --- Takeovers: an emergency owns the whole screen ----------------------
     GoRoute(path: Routes.tracking, pageBuilder: (c, s) => _page(const TrackingScreen())),
     GoRoute(path: Routes.noDriver, pageBuilder: (c, s) => _page(const NoDriverScreen())),
-    GoRoute(
-      path: Routes.driverHome,
-      pageBuilder: (c, s) => _page(const DriverHomeScreen()),
-    ),
-    GoRoute(
-      path: Routes.driverNavigation,
-      pageBuilder: (c, s) => _page(DriverNavigationScreen(caseId: s.extra as String? ?? '')),
-    ),
     GoRoute(
       path: Routes.aiReport,
       pageBuilder: (c, s) => _page(AIReportScreen(caseId: s.extra as String? ?? '')),
@@ -164,33 +222,12 @@ final appRouter = GoRouter(
         ));
       },
     ),
+
+    // --- Driver --------------------------------------------------------------
+    GoRoute(path: Routes.driverHome, pageBuilder: (c, s) => _page(const DriverHomeScreen())),
     GoRoute(
-      path: Routes.firstAid,
-      pageBuilder: (c, s) => _page(const FirstAidScreen()),
-    ),
-    GoRoute(
-      path: Routes.guideDetail,
-      pageBuilder: (c, s) => _page(GuideDetailScreen(guide: s.extra as FirstAidGuideModel)),
-    ),
-    GoRoute(
-      path: Routes.profile,
-      pageBuilder: (c, s) => _page(const ProfileScreen()),
-    ),
-    GoRoute(
-      path: Routes.camps,
-      pageBuilder: (c, s) => _page(const CampsScreen()),
-      routes: [
-        // Nested so /camps/:id keeps the list underneath in the back stack.
-        GoRoute(
-          path: ':id',
-          pageBuilder: (c, s) => _page(
-            CampDetailScreen(
-              campId: s.pathParameters['id'] ?? '',
-              camp: s.extra as CampModel?,
-            ),
-          ),
-        ),
-      ],
+      path: Routes.driverNavigation,
+      pageBuilder: (c, s) => _page(DriverNavigationScreen(caseId: s.extra as String? ?? '')),
     ),
   ],
 );

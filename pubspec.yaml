@@ -107,10 +107,23 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
-  # To add assets to your application, add an assets section, like this:
-  # assets:
-  #   - images/a_dot_burr.jpeg
-  #   - images/a_dot_ham.jpeg
+  # Illustrations are WebP, converted from the 1.9 MB PNG exports — the same
+  # artwork at 2.3 MB instead of 48 MB. Originals live in design_assets/, which
+  # is deliberately outside this list so it is never bundled.
+  #
+  # Brand icons stay PNG: Android's launcher and notification icons require it.
+  #
+  # first_aid folders are listed individually because Flutter fails the build on
+  # a directory that does not exist. Add fracture/, snakebite/, heatstroke/ and
+  # recovery/ here as their artwork lands.
+  assets:
+    - assets/brand/
+    - assets/animations/
+    - assets/illustrations/
+    - assets/first_aid/cpr/
+    - assets/first_aid/choking/
+    - assets/first_aid/bleeding/
+    - assets/first_aid/burns/
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
