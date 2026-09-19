@@ -6,10 +6,14 @@
 class AppAssets {
   AppAssets._();
 
-  // --- Brand (PNG — Android requires it for launcher and notification icons)
-  static const String logoMark = 'assets/brand/logo-mark.png';
-  static const String logoWordmark = 'assets/brand/logo-wordmark.png';
-  static const String splashLogo = 'assets/brand/splash-logo.png';
+  // --- Brand ----------------------------------------------------------------
+  // WebP for everything drawn inside the app. The PNG originals stay in
+  // assets/brand/ as sources for the Android launcher and notification icons —
+  // those must be PNG — but they are not bundled, because a 1 MB icon source
+  // has no business travelling in the APK.
+  static const String logoMark = 'assets/brand/logo-mark.webp';
+  static const String logoWordmark = 'assets/brand/logo-wordmark.webp';
+  static const String splashLogo = 'assets/brand/splash-logo.webp';
 
   // --- Motion ---------------------------------------------------------------
   static const String animSplash = 'assets/animations/splash.json';
@@ -47,8 +51,14 @@ class FirstAidArt {
     'chok': (folder: 'choking', steps: 6),
     'bleed': (folder: 'bleeding', steps: 6),
     'burn': (folder: 'burns', steps: 5),
-    // fracture, snakebite, heatstroke and recovery position have no artwork
-    // yet; their screens fall back to text-only steps.
+    'snake': (folder: 'snakebite', steps: 5),
+    // Drawn, but with no guide behind them in the database yet. They cost
+    // nothing while unmatched, and work the day those guides are added.
+    'fractur': (folder: 'fracture', steps: 6),
+    'heat': (folder: 'heatstroke', steps: 6),
+    'eye': (folder: 'eye-injury', steps: 5),
+    // Still unillustrated: road-accident, drowning and cardiac-arrest. Those
+    // screens fall back to text-only steps.
   };
 
   static ({String folder, int steps})? _match(String slugOrTitle) {

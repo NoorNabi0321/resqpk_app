@@ -117,13 +117,22 @@ flutter:
   # a directory that does not exist. Add fracture/, snakebite/, heatstroke/ and
   # recovery/ here as their artwork lands.
   assets:
-    - assets/brand/
+    # Listed file by file, not as a folder: assets/brand/ also holds the PNG
+    # sources for the launcher and notification icons, which are ~3 MB and are
+    # never drawn by the app itself.
+    - assets/brand/logo-mark.webp
+    - assets/brand/logo-wordmark.webp
+    - assets/brand/splash-logo.webp
     - assets/animations/
     - assets/illustrations/
     - assets/first_aid/cpr/
     - assets/first_aid/choking/
     - assets/first_aid/bleeding/
     - assets/first_aid/burns/
+    - assets/first_aid/snakebite/
+    - assets/first_aid/fracture/
+    - assets/first_aid/heatstroke/
+    - assets/first_aid/eye-injury/
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
