@@ -32,7 +32,7 @@ class EmptyState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Image.asset(illustration, width: 220, fit: BoxFit.contain),
+            _Illustration(illustration, fallback: Icons.inbox_rounded),
             const SizedBox(height: Resq.space4),
             Text(title, style: ResqType.section(), textAlign: TextAlign.center),
             if (message != null) ...[
@@ -80,7 +80,7 @@ class ErrorState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Image.asset(illustration, width: 220, fit: BoxFit.contain),
+            _Illustration(illustration, fallback: Icons.error_outline_rounded),
             const SizedBox(height: Resq.space4),
             Text(title, style: ResqType.section(), textAlign: TextAlign.center),
             if (message != null) ...[
@@ -105,6 +105,28 @@ class ErrorState extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Artwork that degrades to an icon.
+///
+/// Four first-aid guides and a couple of states are still waiting on
+/// illustrations; a missing file must not paint a red exception box over an
+/// empty screen.
+class _Illustration extends StatelessWidget {
+  const _Illustration(this.path, {required this.fallback});
+
+  final String path;
+  final IconData fallback;
+
+  @override
+  Widget build(BuildContext context) {
+    return Image.asset(
+      path,
+      width: 220,
+      fit: BoxFit.contain,
+      errorBuilder: (_, __, ___) => Icon(fallback, size: 88, color: Resq.inkFaint),
     );
   }
 }

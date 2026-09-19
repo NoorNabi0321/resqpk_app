@@ -1,27 +1,37 @@
 import 'dart:async';
-import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../../../core/constants/app_colors.dart';
-import '../../../core/constants/app_text_styles.dart';
 import '../../../core/map/resqpk_map.dart';
 import '../../../core/realtime/realtime_provider.dart';
 import '../../../core/router/app_router.dart';
+import '../../../core/theme/tokens.dart';
+import '../../../core/theme/typography.dart';
 import '../../../core/widgets/back_guard.dart';
+import '../../../core/widgets/primary_button.dart';
+import '../../../core/widgets/resq_card.dart';
 import '../../ai_report/data/models/ai_report_model.dart';
 import '../../ai_report/providers/ai_report_provider.dart';
+import '../../auth/providers/auth_provider.dart';
 import '../../first_aid/providers/first_aid_provider.dart';
 import '../data/sos_repository.dart';
 import '../providers/session_provider.dart';
 import '../providers/sos_provider.dart';
 
+/// Live case: where the ambulance is, who is driving it, and where it is taking
+/// you.
+///
+/// The map is the background, never the content. What matters is the card at
+/// the bottom — it is what someone reads while standing over a casualty, and it
+/// says a different thing at every stage of the case rather than showing empty
+/// fields for a driver who has not been assigned yet.
 class TrackingScreen extends ConsumerStatefulWidget {
   const TrackingScreen({super.key});
 
@@ -90,9 +100,8 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
     // surfacing the clinical reason, which is for the driver and records only.
     _decisionSub = ref.read(socketServiceProvider).caseUpdateStream.listen((data) {
       if (!mounted) return;
-      final event = data['event']?.toString();
 
-      switch (event) {
+      switch (data['event']?.toString()) {
         case 'driver_assigned':
           _addUpdate(_CaseUpdate(
             kind: _UpdateKind.hospital,
@@ -153,12 +162,19 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
     });
   }
 
+  /// The token for this case when the reporter has no account.
+  String? _caseToken(String caseId) => caseTokenFor(
+        ref.read(sessionProvider),
+        signedIn: ref.read(authProvider).isAuthenticated,
+        caseId: caseId,
+      );
+
   Future<void> _fetchRoute() async {
     final caseId = ref.read(sosProvider).activeCaseId;
     if (caseId == null || _fetchingRoute) return;
     _fetchingRoute = true;
     try {
-      final route = await _repo.getCaseRoute(caseId);
+      final route = await _repo.getCaseRoute(caseId, caseToken: _caseToken(caseId));
       final coords = (route['coordinates'] as List? ?? [])
           .whereType<Map>()
           .map((p) => LatLng(
@@ -183,29 +199,32 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
     setState(() => _unreadUpdates = 0);
     showModalBottomSheet<void>(
       context: context,
-      backgroundColor: AppColors.surfaceOne,
+      backgroundColor: Resq.surface,
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(Resq.radiusCard)),
       ),
       builder: (sheetCtx) => SafeArea(
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
+          padding: const EdgeInsets.fromLTRB(Resq.space5, Resq.space5, Resq.space5, Resq.space5),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text('Updates', style: AppTextStyles.subtitle),
+              Text('Updates', style: ResqType.title()),
               const SizedBox(height: 4),
-              Text('Everything happening with your emergency',
-                  style: AppTextStyles.caption),
-              const SizedBox(height: 16),
+              Text(
+                'Everything happening with your emergency',
+                style: ResqType.caption(),
+              ),
+              const SizedBox(height: Resq.space4),
               if (_updates.isEmpty)
                 Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 28),
+                  padding: const EdgeInsets.symmetric(vertical: Resq.space8),
                   child: Text(
-                    'No updates yet. You will see hospital and ambulance news here.',
+                    'No updates yet. Hospital and ambulance news appears here.',
                     textAlign: TextAlign.center,
-                    style: AppTextStyles.caption,
+                    style: ResqType.body(color: Resq.inkMuted),
                   ),
                 )
               else
@@ -214,7 +233,7 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
                   child: ListView.separated(
                     shrinkWrap: true,
                     itemCount: _updates.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 10),
+                    separatorBuilder: (_, __) => const SizedBox(height: Resq.space3),
                     itemBuilder: (_, i) => _UpdateTile(
                       update: _updates[i],
                       onViewReport: _updates[i].kind == _UpdateKind.report
@@ -236,7 +255,7 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
                               if (relevant.isNotEmpty) {
                                 context.push(Routes.guideDetail, extra: relevant.first);
                               } else {
-                                context.push(Routes.firstAid);
+                                context.go(Routes.firstAid);
                               }
                             }
                           : null,
@@ -285,7 +304,11 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not load hospitals: ${e.toString().replaceFirst('Exception: ', '')}')),
+          SnackBar(
+            content: Text(
+              'Could not load hospitals: ${e.toString().replaceFirst('Exception: ', '')}',
+            ),
+          ),
         );
       }
       return;
@@ -294,9 +317,10 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
 
     showModalBottomSheet<void>(
       context: context,
-      backgroundColor: AppColors.surfaceOne,
+      backgroundColor: Resq.surface,
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(Resq.radiusCard)),
       ),
       builder: (sheetCtx) => SafeArea(
         child: Column(
@@ -304,8 +328,8 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 18, 20, 6),
-              child: Text('Choose hospital', style: AppTextStyles.subtitle),
+              padding: const EdgeInsets.fromLTRB(Resq.space5, Resq.space5, Resq.space5, Resq.space2),
+              child: Text('Choose hospital', style: ResqType.title()),
             ),
             Flexible(
               child: ListView.builder(
@@ -317,18 +341,18 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
                   final isCurrent = id == ref.read(sosProvider).activeCase?.hospitalId;
                   return ListTile(
                     leading: Icon(
-                      Icons.local_hospital,
-                      color: isCurrent ? AppColors.confirmedGreen : AppColors.textSecondary,
+                      Icons.local_hospital_rounded,
+                      color: isCurrent ? Resq.ready : Resq.critical,
                     ),
-                    title: Text(h['name']?.toString() ?? 'Hospital', style: AppTextStyles.body),
+                    title: Text(h['name']?.toString() ?? 'Hospital', style: ResqType.bodyStrong()),
                     subtitle: Text(
                       '${h['distanceText'] ?? ''} · ${h['address'] ?? ''}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: AppTextStyles.caption,
+                      style: ResqType.caption(),
                     ),
                     trailing: isCurrent
-                        ? const Icon(Icons.check_circle, color: AppColors.confirmedGreen, size: 20)
+                        ? const Icon(Icons.check_circle, color: Resq.ready, size: 20)
                         : null,
                     onTap: isCurrent
                         ? null
@@ -340,7 +364,7 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
                 },
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: Resq.space2),
           ],
         ),
       ),
@@ -407,16 +431,16 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
     showDialog<void>(
       context: context,
       builder: (dialogCtx) => AlertDialog(
-        backgroundColor: AppColors.surfaceTwo,
-        title: Text('Cancel emergency?', style: AppTextStyles.subtitle),
+        backgroundColor: Resq.surface,
+        title: Text('Cancel emergency?', style: ResqType.section()),
         content: Text(
           'The ambulance will be released. Only cancel if you no longer need help.',
-          style: AppTextStyles.body.copyWith(color: AppColors.textSecondary),
+          style: ResqType.body(color: Resq.inkSoft),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogCtx).pop(),
-            child: Text('Keep', style: AppTextStyles.caption),
+            child: Text('Keep it', style: ResqType.button(color: Resq.inkSoft)),
           ),
           TextButton(
             onPressed: () async {
@@ -424,11 +448,20 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
               await ref.read(sosProvider.notifier).cancelActiveCase();
               if (mounted) context.go(Routes.home);
             },
-            child: Text('Cancel SOS', style: AppTextStyles.caption.copyWith(color: AppColors.sosRed)),
+            child: Text('Cancel SOS', style: ResqType.button(color: Resq.critical)),
           ),
         ],
       ),
     );
+  }
+
+  void _openReport(String caseId) {
+    final existing = _latestReport ?? ref.read(aiReportProvider).report;
+    if (existing != null && existing.isComplete) {
+      context.push(Routes.reportPdf, extra: {'caseId': caseId, 'report': existing});
+    } else {
+      context.push(Routes.aiReport, extra: caseId);
+    }
   }
 
   @override
@@ -464,17 +497,20 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
         showDialog<void>(
           context: context,
           builder: (d) => AlertDialog(
-            backgroundColor: AppColors.surfaceTwo,
-            title: Text('You have arrived', style: AppTextStyles.subtitle),
-            content: Text('You reached the hospital. Stay safe!',
-                style: AppTextStyles.body.copyWith(color: AppColors.textSecondary)),
+            backgroundColor: Resq.surface,
+            title: Text('You have arrived', style: ResqType.section()),
+            content: Text(
+              'You reached the hospital. Your emergency report stays available under '
+              'My requests.',
+              style: ResqType.body(color: Resq.inkSoft),
+            ),
             actions: [
               TextButton(
                 onPressed: () {
                   Navigator.of(d).pop();
                   if (mounted) context.go(Routes.home);
                 },
-                child: Text('Done', style: AppTextStyles.caption.copyWith(color: AppColors.confirmedGreen)),
+                child: Text('Done', style: ResqType.button(color: Resq.ready)),
               ),
             ],
           ),
@@ -484,11 +520,12 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
       }
     });
 
-    final c = ref.watch(sosProvider).activeCase;
+    final sos = ref.watch(sosProvider);
+    final c = sos.activeCase;
     if (c == null) {
       return const Scaffold(
-        backgroundColor: AppColors.background,
-        body: Center(child: CircularProgressIndicator(color: AppColors.sosRed)),
+        backgroundColor: Resq.canvas,
+        body: Center(child: CircularProgressIndicator(color: Resq.critical)),
       );
     }
 
@@ -505,324 +542,249 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
         ? (1 - eta / _originalEtaSeconds!).clamp(0.0, 1.0)
         : 0.0;
 
-    // Back returns to home; the case stays active and tracking is reachable
-    // again from there (and on next app launch via session restore).
+    // Back returns to home; the case stays active and the shell's banner keeps
+    // tracking one tap away.
     return BackTo(
       onBack: () => context.go(Routes.home),
       child: Scaffold(
-      backgroundColor: AppColors.background,
-      body: Stack(
-        children: [
-          FlutterMap(
-            mapController: _mapController,
-            options: MapOptions(initialCenter: driver ?? patient, initialZoom: 14),
-            children: [
-              const ResQPKTileLayer(),
-              PolylineLayer(
-                polylines: [
-                  // Road-following route for the current leg (pickup = blue
-                  // driver→patient; dropoff = green →hospital). Falls back to a
-                  // straight line only while the road route hasn't loaded yet.
-                  if (_routePoints.length >= 2)
-                    ...routePolyline(
-                      _routePoints,
-                      color: _routeLeg == 'dropoff'
-                          ? AppColors.confirmedGreen
-                          : AppColors.infoBlue,
-                    )
-                  else if (_routeLeg != 'dropoff' && driver != null)
-                    ...routePolyline([driver, patient],
-                        color: AppColors.infoBlue, isAlternate: true)
-                  else if (_routeLeg == 'dropoff' && hospital != null)
-                    ...routePolyline([patient, hospital],
-                        color: AppColors.confirmedGreen, isAlternate: true),
-                ],
-              ),
-              MarkerLayer(
-                markers: [
-                  Marker(
-                    point: patient,
-                    width: MapSpec.touchTarget,
-                    height: MapSpec.touchTarget,
-                    child: const UserLocationDot(color: AppColors.sosRed),
+        backgroundColor: Resq.canvas,
+        body: Stack(
+          children: [
+            RepaintBoundary(
+              child: FlutterMap(
+                mapController: _mapController,
+                options: MapOptions(initialCenter: driver ?? patient, initialZoom: 14),
+                children: [
+                  const ResQPKTileLayer(light: true),
+                  PolylineLayer(
+                    polylines: [
+                      // Road-following route for the current leg (pickup = blue
+                      // driver→patient; dropoff = green →hospital). Falls back
+                      // to a straight line only while the road route is loading.
+                      if (_routePoints.length >= 2)
+                        ...routePolyline(
+                          _routePoints,
+                          color: _routeLeg == 'dropoff' ? Resq.ready : Resq.info,
+                        )
+                      else if (_routeLeg != 'dropoff' && driver != null)
+                        ...routePolyline([driver, patient], color: Resq.info, isAlternate: true)
+                      else if (_routeLeg == 'dropoff' && hospital != null)
+                        ...routePolyline([patient, hospital],
+                            color: Resq.ready, isAlternate: true),
+                    ],
                   ),
-                  if (hospital != null)
-                    Marker(
-                      point: hospital,
-                      width: MapSpec.touchTarget,
-                      height: MapSpec.pinHeight,
-                      alignment: Alignment.topCenter,
-                      child: const MapDestinationPin(color: AppColors.confirmedGreen),
-                    ),
-                  if (driver != null)
-                    Marker(
-                      point: driver,
-                      width: MapSpec.touchTarget,
-                      height: MapSpec.touchTarget,
-                      child: NavigationPuck(
-                        headingDegrees: _driverHeading,
-                        color: AppColors.infoBlue,
-                        icon: Icons.navigation,
+                  MarkerLayer(
+                    markers: [
+                      Marker(
+                        point: patient,
+                        width: MapSpec.touchTarget,
+                        height: MapSpec.touchTarget,
+                        child: const UserLocationDot(color: Resq.critical),
                       ),
-                    ),
+                      if (hospital != null)
+                        Marker(
+                          point: hospital,
+                          width: MapSpec.touchTarget,
+                          height: MapSpec.pinHeight,
+                          alignment: Alignment.topCenter,
+                          child: const MapDestinationPin(color: Resq.ready),
+                        ),
+                      if (driver != null)
+                        Marker(
+                          point: driver,
+                          width: MapSpec.touchTarget,
+                          height: MapSpec.touchTarget,
+                          child: NavigationPuck(
+                            headingDegrees: _driverHeading,
+                            color: Resq.info,
+                            icon: Icons.navigation,
+                          ),
+                        ),
+                    ],
+                  ),
                 ],
               ),
-            ],
-          ),
-          SafeArea(
-            child: Align(
-              alignment: Alignment.topCenter,
+            ),
+
+            // --- Top chrome ---------------------------------------------------
+            SafeArea(
               child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Row(
+                padding: const EdgeInsets.all(Resq.space3),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _StatusPill(status: ref.watch(sosProvider).status),
-                    const SizedBox(width: 8),
-                    _RequestCodeChip(caseId: c.id),
-                    const Spacer(),
-                    _UpdatesButton(
-                      unread: _unreadUpdates,
-                      onTap: () => _openUpdatesSheet(c.id),
+                    Row(
+                      children: [
+                        _MapChipButton(
+                          icon: Icons.arrow_back_rounded,
+                          onTap: () => context.go(Routes.home),
+                        ),
+                        const SizedBox(width: Resq.space2),
+                        Flexible(child: _TrackingStatusPill(status: sos.status)),
+                        const Spacer(),
+                        _UpdatesButton(
+                          unread: _unreadUpdates,
+                          onTap: () => _openUpdatesSheet(c.id),
+                        ),
+                      ],
                     ),
+                    const SizedBox(height: Resq.space2),
+                    _RequestCodeChip(caseId: c.id),
                   ],
                 ),
               ),
             ),
-          ),
-          Align(
-            alignment: Alignment.bottomCenter,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _StatusCard(
-                  driverName: c.driverName ?? 'Driver',
-                  vehicleNumber: c.vehicleNumber ?? '',
-                  etaText: _etaText(eta, ref.watch(sosProvider).status),
-                  progress: progress,
-                  hospitalName: c.hospitalName ?? 'Hospital',
-                  hasReport: _latestReport != null ||
-                      (ref.watch(aiReportProvider).report?.isComplete ?? false),
-                  onCallDriver: () => _call(c.driverPhone),
-                  // With a report in hand the document is what they want to
-                  // see; otherwise take them to the generation screen.
-                  onAiReport: () {
-                    final existing =
-                        _latestReport ?? ref.read(aiReportProvider).report;
-                    if (existing != null && existing.isComplete) {
-                      context.push(Routes.reportPdf,
-                          extra: {'caseId': c.id, 'report': existing});
-                    } else {
-                      context.push(Routes.aiReport, extra: c.id);
-                    }
-                  },
-                  onCancel: _confirmCancel,
-                  onChangeHospital: _openChangeHospitalSheet,
-                  hospitalConfirmed: ref.watch(sosProvider).isHospitalConfirmed,
-                  preparationNote: ref.watch(sosProvider).hospitalPreparationNote,
-                  hospitalSelected: c.hospitalId != null,
-                  hasDriver: c.driverId != null,
-                  suggestedHospital: _suggestedHospital,
-                  loadingSuggestion: _loadingSuggestion,
-                  confirmingHospital: _confirmingHospital,
-                  onConfirmHospital: _confirmSuggestedHospital,
-                ),
-              ],
+
+            // --- The card that actually tells you what is happening -----------
+            Align(
+              alignment: Alignment.bottomCenter,
+              child: _TrackingCard(
+                status: sos.status,
+                driverName: c.driverName,
+                vehicleNumber: c.vehicleNumber,
+                driverPhone: c.driverPhone,
+                etaText: _etaText(eta, sos.status),
+                progress: progress,
+                hospitalName: c.hospitalName,
+                hospitalSelected: c.hospitalId != null,
+                hospitalConfirmed: sos.isHospitalConfirmed,
+                preparationNote: sos.hospitalPreparationNote,
+                hasDriver: c.driverId != null,
+                hasReport: _latestReport != null ||
+                    (ref.watch(aiReportProvider).report?.isComplete ?? false),
+                suggestedHospital: _suggestedHospital,
+                loadingSuggestion: _loadingSuggestion,
+                confirmingHospital: _confirmingHospital,
+                onCallDriver: () => _call(c.driverPhone),
+                onAiReport: () => _openReport(c.id),
+                onCancel: _confirmCancel,
+                onChangeHospital: _openChangeHospitalSheet,
+                onConfirmHospital: _confirmSuggestedHospital,
+              ),
             ),
-          ),
-        ],
-      ),
+          ],
+        ),
       ),
     );
   }
 
   String _etaText(int? seconds, SOSStatus status) {
-    if (status == SOSStatus.arrived) return 'Arrived';
-    if (seconds == null) return 'Calculating...';
+    if (status == SOSStatus.arrived) return 'The ambulance is here';
+    if (seconds == null) return 'Working out the arrival time…';
     final mins = (seconds / 60).ceil();
-    return 'ETA: $mins min';
+    return mins <= 1 ? 'Arriving in about a minute' : 'About $mins minutes away';
   }
 }
 
-enum _UpdateKind { hospital, accepted, driver, report }
+// --- Top chrome --------------------------------------------------------------
 
-class _CaseUpdate {
-  final _UpdateKind kind;
-  final String title;
-  final String body;
-  final DateTime at;
+class _MapChipButton extends StatelessWidget {
+  const _MapChipButton({required this.icon, required this.onTap});
 
-  const _CaseUpdate({
-    required this.kind,
-    required this.title,
-    required this.body,
-    required this.at,
-  });
-}
-
-/// Bell-style button beside the EMERGENCY ACTIVE pill. Replaces the panel that
-/// used to sit over the map and cover the route.
-class _UpdatesButton extends StatelessWidget {
-  final int unread;
+  final IconData icon;
   final VoidCallback onTap;
 
-  const _UpdatesButton({required this.unread, required this.onTap});
-
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 44,
-        height: 44,
-        decoration: BoxDecoration(
-          color: AppColors.surfaceTwo,
-          shape: BoxShape.circle,
-          border: Border.all(color: AppColors.borderGlass),
-        ),
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            const Icon(Icons.notifications_none, color: AppColors.textPrimary, size: 21),
-            if (unread > 0)
-              Positioned(
-                top: 8,
-                right: 9,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                  decoration: BoxDecoration(
-                    color: AppColors.sosRed,
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                  child: Text(
-                    unread > 9 ? '9+' : '$unread',
-                    style: AppTextStyles.caption.copyWith(
-                      color: Colors.white,
-                      fontSize: 9,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ),
-          ],
+    return Material(
+      color: Resq.surface,
+      shape: const CircleBorder(),
+      elevation: 2,
+      child: InkWell(
+        onTap: onTap,
+        customBorder: const CircleBorder(),
+        child: SizedBox(
+          width: Resq.tapTarget,
+          height: Resq.tapTarget,
+          child: Icon(icon, size: 20, color: Resq.ink),
         ),
       ),
     );
   }
 }
 
-class _UpdateTile extends StatelessWidget {
-  final _CaseUpdate update;
-  final VoidCallback? onViewReport;
-  final VoidCallback? onSeeGuide;
+class _TrackingStatusPill extends StatelessWidget {
+  const _TrackingStatusPill({required this.status});
 
-  const _UpdateTile({required this.update, this.onViewReport, this.onSeeGuide});
-
-  ({IconData icon, Color color}) get _style {
-    switch (update.kind) {
-      case _UpdateKind.accepted:
-        return (icon: Icons.check_circle, color: AppColors.confirmedGreen);
-      case _UpdateKind.hospital:
-        return (icon: Icons.local_hospital, color: AppColors.infoBlue);
-      case _UpdateKind.driver:
-        return (icon: Icons.local_shipping, color: AppColors.infoBlue);
-      case _UpdateKind.report:
-        return (icon: Icons.description, color: AppColors.warningAmber);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final s = _style;
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceTwo,
-        borderRadius: BorderRadius.circular(14),
-        border: Border(left: BorderSide(color: s.color, width: 3)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(s.icon, color: s.color, size: 18),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(update.title,
-                        style: AppTextStyles.body.copyWith(fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 2),
-                    Text(update.body, style: AppTextStyles.caption),
-                  ],
-                ),
-              ),
-              Text(
-                TimeOfDay.fromDateTime(update.at).format(context),
-                style: AppTextStyles.caption,
-              ),
-            ],
-          ),
-          if (onViewReport != null || onSeeGuide != null) ...[
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                if (onViewReport != null)
-                  TextButton.icon(
-                    onPressed: onViewReport,
-                    icon: const Icon(Icons.picture_as_pdf, size: 15, color: AppColors.infoBlue),
-                    label: Text('View Report',
-                        style: AppTextStyles.caption.copyWith(color: AppColors.infoBlue)),
-                    style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      minimumSize: const Size(0, 32),
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    ),
-                  ),
-                if (onSeeGuide != null)
-                  TextButton.icon(
-                    onPressed: onSeeGuide,
-                    icon: const Icon(Icons.medical_information,
-                        size: 15, color: AppColors.confirmedGreen),
-                    label: Text('First Aid Guide',
-                        style: AppTextStyles.caption.copyWith(color: AppColors.confirmedGreen)),
-                    style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      minimumSize: const Size(0, 32),
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    ),
-                  ),
-              ],
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _StatusPill extends StatelessWidget {
   final SOSStatus status;
-  const _StatusPill({required this.status});
 
   @override
   Widget build(BuildContext context) {
+    final (label, color, icon) = switch (status) {
+      SOSStatus.searching => ('Finding an ambulance', Resq.critical, Icons.radar_rounded),
+      SOSStatus.driverAssigned => ('Ambulance on the way', Resq.info, Icons.local_shipping_rounded),
+      SOSStatus.arrived => ('Ambulance arrived', Resq.ready, Icons.check_circle_outline_rounded),
+      SOSStatus.enRoute => ('On the way to hospital', Resq.info, Icons.navigation_rounded),
+      SOSStatus.completed => ('Completed', Resq.ready, Icons.check_circle_outline_rounded),
+      _ => ('Emergency active', Resq.critical, Icons.emergency_rounded),
+    };
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: Resq.space3, vertical: 10),
       decoration: BoxDecoration(
-        color: AppColors.surfaceTwo,
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: AppColors.borderGlass),
+        color: Resq.surface,
+        borderRadius: BorderRadius.circular(Resq.radiusPill),
+        boxShadow: Resq.raisedShadow,
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.emergency, color: AppColors.sosRed, size: 16),
-          const SizedBox(width: 8),
-          Text('EMERGENCY ACTIVE', style: AppTextStyles.caption.copyWith(color: AppColors.sosRed)),
+          Icon(icon, color: color, size: 16),
+          const SizedBox(width: Resq.space2),
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: ResqType.caption(color: color),
+            ),
+          ),
         ],
+      ),
+    );
+  }
+}
+
+class _UpdatesButton extends StatelessWidget {
+  const _UpdatesButton({required this.unread, required this.onTap});
+
+  final int unread;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Resq.surface,
+      shape: const CircleBorder(),
+      elevation: 2,
+      child: InkWell(
+        onTap: onTap,
+        customBorder: const CircleBorder(),
+        child: SizedBox(
+          width: Resq.tapTarget,
+          height: Resq.tapTarget,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              const Icon(Icons.notifications_none_rounded, size: 21, color: Resq.ink),
+              if (unread > 0)
+                Positioned(
+                  top: 10,
+                  right: 10,
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: const BoxDecoration(color: Resq.critical, shape: BoxShape.circle),
+                    constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                    child: Text(
+                      '$unread',
+                      textAlign: TextAlign.center,
+                      style: ResqType.micro(color: Colors.white),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -832,8 +794,8 @@ class _StatusPill extends StatelessWidget {
 ///
 /// It is the only handle they have on this emergency — it reopens the request
 /// from any phone and unlocks the report afterwards — so it belongs on screen
-/// while the ambulance is coming, not only in the confirmation that scrolled
-/// away. Tapping copies it.
+/// while the ambulance is coming, not only in a confirmation that scrolled away.
+/// Tapping copies it.
 class _RequestCodeChip extends ConsumerWidget {
   const _RequestCodeChip({required this.caseId});
 
@@ -854,18 +816,20 @@ class _RequestCodeChip extends ConsumerWidget {
         );
       },
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: Resq.space3, vertical: 8),
         decoration: BoxDecoration(
-          color: AppColors.surfaceTwo,
-          borderRadius: BorderRadius.circular(999),
-          border: Border.all(color: AppColors.borderGlass),
+          color: Resq.surface,
+          borderRadius: BorderRadius.circular(Resq.radiusPill),
+          boxShadow: Resq.cardShadow,
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.tag_rounded, size: 16, color: AppColors.textSecondary),
-            const SizedBox(width: 6),
-            Text(code, style: AppTextStyles.caption),
+            const Icon(Icons.tag_rounded, size: 15, color: Resq.inkMuted),
+            const SizedBox(width: 5),
+            Text(code, style: ResqType.caption(color: Resq.ink)),
+            const SizedBox(width: 5),
+            const Icon(Icons.copy_rounded, size: 13, color: Resq.inkFaint),
           ],
         ),
       ),
@@ -873,108 +837,334 @@ class _RequestCodeChip extends ConsumerWidget {
   }
 }
 
+// --- The tracking card -------------------------------------------------------
+
+/// One card, four faces: searching, assigned, en route, arrived.
+///
+/// Before an ambulance accepts there is no driver, no ETA and no hospital — the
+/// old card showed "Driver" and an empty progress bar, which read as a system
+/// that had lost the request.
+class _TrackingCard extends StatelessWidget {
+  const _TrackingCard({
+    required this.status,
+    required this.driverName,
+    required this.vehicleNumber,
+    required this.driverPhone,
+    required this.etaText,
+    required this.progress,
+    required this.hospitalName,
+    required this.hospitalSelected,
+    required this.hospitalConfirmed,
+    required this.preparationNote,
+    required this.hasDriver,
+    required this.hasReport,
+    required this.suggestedHospital,
+    required this.loadingSuggestion,
+    required this.confirmingHospital,
+    required this.onCallDriver,
+    required this.onAiReport,
+    required this.onCancel,
+    required this.onChangeHospital,
+    required this.onConfirmHospital,
+  });
+
+  final SOSStatus status;
+  final String? driverName;
+  final String? vehicleNumber;
+  final String? driverPhone;
+  final String etaText;
+  final double progress;
+  final String? hospitalName;
+  final bool hospitalSelected;
+  final bool hospitalConfirmed;
+  final String? preparationNote;
+  final bool hasDriver;
+  final bool hasReport;
+  final Map<String, dynamic>? suggestedHospital;
+  final bool loadingSuggestion;
+  final bool confirmingHospital;
+  final VoidCallback onCallDriver;
+  final VoidCallback onAiReport;
+  final VoidCallback onCancel;
+  final VoidCallback onChangeHospital;
+  final VoidCallback onConfirmHospital;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      decoration: const BoxDecoration(
+        color: Resq.surface,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(Resq.radiusCard)),
+        boxShadow: Resq.raisedShadow,
+      ),
+      child: SafeArea(
+        top: false,
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(
+              Resq.space5,
+              Resq.space4,
+              Resq.space5,
+              Resq.space4,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Resq.border,
+                      borderRadius: BorderRadius.circular(Resq.radiusPill),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: Resq.space4),
+
+                if (hasDriver) ..._assigned(context) else ..._searching(context),
+
+                const SizedBox(height: Resq.space4),
+
+                if (!hospitalSelected)
+                  _HospitalChoice(
+                    hasDriver: hasDriver,
+                    suggested: suggestedHospital,
+                    loading: loadingSuggestion,
+                    confirming: confirmingHospital,
+                    onConfirm: onConfirmHospital,
+                    onChooseAnother: onChangeHospital,
+                  )
+                else
+                  _HospitalRow(
+                    name: hospitalName ?? 'Hospital',
+                    confirmed: hospitalConfirmed,
+                    preparationNote: preparationNote,
+                    onChange: onChangeHospital,
+                  ),
+
+                const SizedBox(height: Resq.space4),
+                SecondaryButton(
+                  label: hasReport ? 'View emergency report' : 'Add details for the crew',
+                  icon: hasReport ? Icons.description_outlined : Icons.mic_none_rounded,
+                  onPressed: onAiReport,
+                  height: Resq.tapTarget,
+                ),
+                TextButton(
+                  onPressed: onCancel,
+                  child: Text('Cancel emergency', style: ResqType.button(color: Resq.critical)),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// No ambulance yet: say what is happening and keep 1122 within reach.
+  List<Widget> _searching(BuildContext context) {
+    return [
+      Row(
+        children: [
+          Container(
+            width: 46,
+            height: 46,
+            decoration: const BoxDecoration(color: Resq.criticalTint, shape: BoxShape.circle),
+            child: const Icon(Icons.radar_rounded, color: Resq.critical),
+          )
+              .animate(onPlay: (c) => c.repeat(reverse: true))
+              .scale(
+                duration: 900.ms,
+                begin: const Offset(1, 1),
+                end: const Offset(1.08, 1.08),
+                curve: Curves.easeInOut,
+              ),
+          const SizedBox(width: Resq.space3),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Finding the nearest ambulance', style: ResqType.section()),
+                const SizedBox(height: 2),
+                Text(
+                  'Drivers are being offered your emergency one at a time, closest first.',
+                  style: ResqType.caption(color: Resq.inkSoft),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+      const SizedBox(height: Resq.space4),
+      // Waiting is the moment people reach for a phone. Give them the number
+      // rather than making them leave the app to find it.
+      SecondaryButton(
+        label: 'Call Rescue 1122',
+        icon: Icons.call_rounded,
+        color: Resq.critical,
+        height: Resq.tapTarget,
+        onPressed: () async {
+          final uri = Uri(scheme: 'tel', path: '1122');
+          if (await canLaunchUrl(uri)) await launchUrl(uri);
+        },
+      ),
+    ];
+  }
+
+  /// An ambulance is coming, or has arrived.
+  List<Widget> _assigned(BuildContext context) {
+    final arrived = status == SOSStatus.arrived;
+    final name = (driverName?.isNotEmpty ?? false) ? driverName! : 'Your driver';
+
+    return [
+      Row(
+        children: [
+          CircleAvatar(
+            radius: 24,
+            backgroundColor: Resq.infoTint,
+            child: Text(name[0].toUpperCase(), style: ResqType.section(color: Resq.info)),
+          ),
+          const SizedBox(width: Resq.space3),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(name, style: ResqType.section()),
+                Text(
+                  (vehicleNumber?.isNotEmpty ?? false) ? vehicleNumber! : 'Ambulance',
+                  style: ResqType.caption(),
+                ),
+              ],
+            ),
+          ),
+          if (driverPhone?.isNotEmpty ?? false)
+            IconButton.filled(
+              onPressed: onCallDriver,
+              style: IconButton.styleFrom(
+                backgroundColor: Resq.readyTint,
+                foregroundColor: Resq.ready,
+                minimumSize: const Size(Resq.tapTarget, Resq.tapTarget),
+              ),
+              icon: const Icon(Icons.call_rounded),
+            ),
+        ],
+      ),
+      const SizedBox(height: Resq.space4),
+      AnimatedSwitcher(
+        duration: const Duration(milliseconds: 250),
+        child: Text(
+          etaText,
+          key: ValueKey(etaText),
+          style: ResqType.section(color: arrived ? Resq.ready : Resq.info),
+        ),
+      ),
+      const SizedBox(height: Resq.space2),
+      ClipRRect(
+        borderRadius: BorderRadius.circular(Resq.radiusPill),
+        child: TweenAnimationBuilder<double>(
+          tween: Tween(begin: 0, end: arrived ? 1 : progress),
+          duration: const Duration(milliseconds: 300),
+          builder: (_, value, __) => LinearProgressIndicator(
+            value: value,
+            minHeight: 8,
+            backgroundColor: Resq.surfaceAlt,
+            color: arrived ? Resq.ready : Resq.info,
+          ),
+        ),
+      ),
+    ];
+  }
+}
+
 /// Shown until the patient confirms a destination. No hospital is notified
 /// before this; the nearest one is only a default the patient can change.
-class _HospitalConfirmBlock extends StatelessWidget {
-  final bool hasDriver;
-  final Map<String, dynamic>? suggestedHospital;
-  final bool loading;
-  final bool confirming;
-  final VoidCallback onConfirm;
-  final VoidCallback onChooseAnother;
-
-  const _HospitalConfirmBlock({
+class _HospitalChoice extends StatelessWidget {
+  const _HospitalChoice({
     required this.hasDriver,
-    required this.suggestedHospital,
+    required this.suggested,
     required this.loading,
     required this.confirming,
     required this.onConfirm,
     required this.onChooseAnother,
   });
 
+  final bool hasDriver;
+  final Map<String, dynamic>? suggested;
+  final bool loading;
+  final bool confirming;
+  final VoidCallback onConfirm;
+  final VoidCallback onChooseAnother;
+
   @override
   Widget build(BuildContext context) {
-    final name = suggestedHospital?['name']?.toString();
-    final distance = suggestedHospital?['distanceText']?.toString();
+    final name = suggested?['name']?.toString();
+    final distance = suggested?['distanceText']?.toString();
 
     final String message;
     if (!hasDriver) {
-      message = 'You can choose a hospital once an ambulance accepts your request.';
+      message = 'You can choose a hospital once an ambulance accepts.';
     } else if (name == null) {
       message = loading
           ? 'Finding the nearest hospital…'
-          : 'Could not find a nearby hospital. Choose one from the list.';
+          : 'No hospital found nearby. Choose one from the list.';
     } else {
       message = 'Nearest: $name${distance != null ? ' · $distance' : ''}';
     }
 
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(Resq.space4),
       decoration: BoxDecoration(
-        color: AppColors.warningAmber.withValues(alpha: 0.10),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.warningAmber.withValues(alpha: 0.55)),
+        color: Resq.decisionTint,
+        borderRadius: BorderRadius.circular(Resq.radiusCard),
+        border: Border.all(color: Resq.decision.withValues(alpha: 0.4)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
             children: [
-              const Icon(Icons.local_hospital, color: AppColors.warningAmber, size: 18),
-              const SizedBox(width: 8),
+              const Icon(Icons.local_hospital_rounded, color: Resq.decision, size: 18),
+              const SizedBox(width: Resq.space2),
               Expanded(
                 child: Text(
                   hasDriver ? 'Confirm your hospital' : 'Hospital',
-                  style: AppTextStyles.subtitle.copyWith(fontSize: 15),
+                  style: ResqType.bodyStrong(),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 6),
-          Text(message, style: name != null ? AppTextStyles.body : AppTextStyles.caption),
+          const SizedBox(height: Resq.space2),
+          Text(message, style: ResqType.body(color: Resq.inkSoft)),
           if (hasDriver) ...[
-            const SizedBox(height: 12),
+            const SizedBox(height: Resq.space3),
             Row(
               children: [
                 Expanded(
-                  child: ElevatedButton(
-                    onPressed: (name == null || confirming) ? null : onConfirm,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.confirmedGreen,
-                      disabledBackgroundColor: AppColors.surfaceThree,
-                      minimumSize: const Size(0, 44),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
-                    ),
-                    child: confirming
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                          )
-                        : Text('Confirm', style: AppTextStyles.buttonLabel.copyWith(fontSize: 14)),
+                  child: PrimaryButton(
+                    label: 'Confirm',
+                    color: Resq.ready,
+                    height: 44,
+                    loading: confirming,
+                    onPressed: name == null ? null : onConfirm,
                   ),
                 ),
-                const SizedBox(width: 10),
+                const SizedBox(width: Resq.space3),
                 Expanded(
-                  child: OutlinedButton(
+                  child: SecondaryButton(
+                    label: 'Choose another',
+                    height: 44,
                     onPressed: confirming ? null : onChooseAnother,
-                    style: OutlinedButton.styleFrom(
-                      side: const BorderSide(color: AppColors.infoBlue),
-                      minimumSize: const Size(0, 44),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
-                    ),
-                    child: Text(
-                      'Choose another',
-                      style: AppTextStyles.caption.copyWith(color: AppColors.infoBlue),
-                    ),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: Resq.space2),
             Text(
               'The hospital is only notified after you confirm.',
-              style: AppTextStyles.caption.copyWith(fontSize: 11),
+              style: ResqType.micro(color: Resq.inkSoft),
             ),
           ],
         ],
@@ -983,187 +1173,158 @@ class _HospitalConfirmBlock extends StatelessWidget {
   }
 }
 
-class _StatusCard extends StatelessWidget {
-  final String driverName;
-  final String vehicleNumber;
-  final String etaText;
-  final double progress;
-  final String hospitalName;
-  final bool hasReport;
-  final VoidCallback onCallDriver;
-  final VoidCallback onAiReport;
-  final VoidCallback onCancel;
-  final VoidCallback onChangeHospital;
-  final bool hospitalConfirmed;
-  final String? preparationNote;
-  final bool hospitalSelected;
-  final bool hasDriver;
-  final Map<String, dynamic>? suggestedHospital;
-  final bool loadingSuggestion;
-  final bool confirmingHospital;
-  final VoidCallback onConfirmHospital;
-
-  const _StatusCard({
-    required this.driverName,
-    required this.vehicleNumber,
-    required this.etaText,
-    required this.progress,
-    required this.hospitalName,
-    this.hasReport = false,
-    required this.onCallDriver,
-    required this.onAiReport,
-    required this.onCancel,
-    required this.onChangeHospital,
-    this.hospitalConfirmed = false,
-    this.preparationNote,
-    this.hospitalSelected = true,
-    this.hasDriver = true,
-    this.suggestedHospital,
-    this.loadingSuggestion = false,
-    this.confirmingHospital = false,
-    required this.onConfirmHospital,
+class _HospitalRow extends StatelessWidget {
+  const _HospitalRow({
+    required this.name,
+    required this.confirmed,
+    required this.preparationNote,
+    required this.onChange,
   });
+
+  final String name;
+  final bool confirmed;
+  final String? preparationNote;
+  final VoidCallback onChange;
 
   @override
   Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-        child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
-          decoration: BoxDecoration(
-            color: AppColors.surfaceOne.withValues(alpha: 0.92),
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-            border: Border.all(color: AppColors.borderGlass),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+    return ResqCard(
+      padding: const EdgeInsets.all(Resq.space3),
+      accent: confirmed ? Resq.ready : Resq.decision,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
             children: [
-              Row(
-                children: [
-                  CircleAvatar(
-                    radius: 22,
-                    backgroundColor: AppColors.infoBlue,
-                    child: Text(
-                      driverName.isNotEmpty ? driverName[0].toUpperCase() : '?',
-                      style: AppTextStyles.subtitle.copyWith(color: Colors.white),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(driverName, style: AppTextStyles.subtitle),
-                        Text(vehicleNumber, style: AppTextStyles.caption),
-                      ],
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: onCallDriver,
-                    icon: const Icon(Icons.phone, color: AppColors.confirmedGreen),
-                  ),
-                ],
+              Icon(
+                Icons.local_hospital_rounded,
+                color: confirmed ? Resq.ready : Resq.decision,
+                size: 18,
               ),
-              const SizedBox(height: 14),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(etaText, style: AppTextStyles.subtitle.copyWith(color: AppColors.confirmedGreen)),
-                ],
-              ),
-              const SizedBox(height: 8),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(6),
-                child: LinearProgressIndicator(
-                  value: progress,
-                  minHeight: 8,
-                  backgroundColor: AppColors.surfaceThree,
-                  color: AppColors.confirmedGreen,
+              const SizedBox(width: Resq.space2),
+              Expanded(child: Text(name, style: ResqType.bodyStrong())),
+              if (confirmed)
+                StatusPill.ready('Expecting you')
+                    .animate()
+                    .scale(duration: 300.ms, curve: Curves.easeOutBack)
+              else
+                TextButton(
+                  onPressed: onChange,
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: Resq.space2),
+                    minimumSize: const Size(0, 36),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  child: Text('Change', style: ResqType.caption(color: Resq.brandInk)),
                 ),
-              ),
-              const SizedBox(height: 16),
-              if (!hospitalSelected)
-                _HospitalConfirmBlock(
-                  hasDriver: hasDriver,
-                  suggestedHospital: suggestedHospital,
-                  loading: loadingSuggestion,
-                  confirming: confirmingHospital,
-                  onConfirm: onConfirmHospital,
-                  onChooseAnother: onChangeHospital,
-                )
-              else ...[
-                Row(
-                  children: [
-                    const Icon(Icons.local_hospital, color: AppColors.confirmedGreen, size: 18),
-                    const SizedBox(width: 8),
-                    Expanded(child: Text(hospitalName, style: AppTextStyles.body)),
-                    if (hospitalConfirmed)
-                      TweenAnimationBuilder<double>(
-                        tween: Tween(begin: 0.85, end: 1),
-                        duration: const Duration(milliseconds: 320),
-                        curve: Curves.easeOutBack,
-                        builder: (context, scale, child) =>
-                            Transform.scale(scale: scale, child: child),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                          decoration: BoxDecoration(
-                            color: AppColors.confirmedGreen.withValues(alpha: 0.18),
-                            borderRadius: BorderRadius.circular(999),
-                            border: Border.all(color: AppColors.confirmedGreen),
-                          ),
-                          child: Text(
-                            'Hospital confirmed ✓',
-                            style: AppTextStyles.caption.copyWith(
-                                color: AppColors.confirmedGreen, fontWeight: FontWeight.bold),
-                          ),
-                        ),
-                      )
-                    else
-                      TextButton(
-                        onPressed: onChangeHospital,
-                        style: TextButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(horizontal: 8),
-                          minimumSize: const Size(0, 32),
-                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        ),
-                        child: Text(
-                          'Change',
-                          style: AppTextStyles.caption.copyWith(color: AppColors.infoBlue),
-                        ),
-                      ),
-                  ],
-                ),
-                if (!hospitalConfirmed)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4, left: 26),
-                    child: Text('Waiting for the hospital to accept', style: AppTextStyles.caption),
-                  ),
-                if (hospitalConfirmed && preparationNote != null && preparationNote!.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 6, left: 26),
-                    child: Text(preparationNote!, style: AppTextStyles.caption),
-                  ),
-              ],
-              const SizedBox(height: 16),
-              OutlinedButton.icon(
-                onPressed: onAiReport,
-                icon: const Icon(Icons.smart_toy_outlined, color: AppColors.infoBlue, size: 18),
-                label: Text(hasReport ? 'View Full Report' : 'Generate AI Report',
-                    style: AppTextStyles.caption.copyWith(color: AppColors.infoBlue)),
-                style: OutlinedButton.styleFrom(side: const BorderSide(color: AppColors.infoBlue)),
-              ),
-              TextButton(
-                onPressed: onCancel,
-                child: Text('Cancel Emergency',
-                    style: AppTextStyles.caption.copyWith(color: AppColors.sosRed)),
-              ),
             ],
           ),
-        ),
+          if (!confirmed)
+            Padding(
+              padding: const EdgeInsets.only(top: 4, left: 26),
+              child: Text('Waiting for the hospital to accept', style: ResqType.caption()),
+            ),
+          if (confirmed && (preparationNote?.isNotEmpty ?? false))
+            Padding(
+              padding: const EdgeInsets.only(top: 6, left: 26),
+              child: Text(preparationNote!, style: ResqType.caption(color: Resq.inkSoft)),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+// --- Updates -----------------------------------------------------------------
+
+enum _UpdateKind { hospital, accepted, driver, report }
+
+class _CaseUpdate {
+  const _CaseUpdate({
+    required this.kind,
+    required this.title,
+    required this.body,
+    required this.at,
+  });
+
+  final _UpdateKind kind;
+  final String title;
+  final String body;
+  final DateTime at;
+}
+
+class _UpdateTile extends StatelessWidget {
+  const _UpdateTile({required this.update, this.onViewReport, this.onSeeGuide});
+
+  final _CaseUpdate update;
+  final VoidCallback? onViewReport;
+  final VoidCallback? onSeeGuide;
+
+  ({IconData icon, Color color}) get _style => switch (update.kind) {
+        _UpdateKind.accepted => (icon: Icons.check_circle_rounded, color: Resq.ready),
+        _UpdateKind.hospital => (icon: Icons.local_hospital_rounded, color: Resq.info),
+        _UpdateKind.driver => (icon: Icons.local_shipping_rounded, color: Resq.info),
+        _UpdateKind.report => (icon: Icons.description_rounded, color: Resq.decision),
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    final s = _style;
+
+    return ResqCard(
+      padding: const EdgeInsets.all(Resq.space3),
+      accent: s.color,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(s.icon, color: s.color, size: 18),
+              const SizedBox(width: Resq.space3),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(update.title, style: ResqType.bodyStrong()),
+                    const SizedBox(height: 2),
+                    Text(update.body, style: ResqType.caption(color: Resq.inkSoft)),
+                  ],
+                ),
+              ),
+              Text(TimeOfDay.fromDateTime(update.at).format(context), style: ResqType.micro()),
+            ],
+          ),
+          if (onViewReport != null || onSeeGuide != null) ...[
+            const SizedBox(height: Resq.space2),
+            Row(
+              children: [
+                if (onViewReport != null)
+                  TextButton.icon(
+                    onPressed: onViewReport,
+                    icon: const Icon(Icons.picture_as_pdf_rounded, size: 15, color: Resq.brandInk),
+                    label: Text('View report', style: ResqType.caption(color: Resq.brandInk)),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: Resq.space2),
+                      minimumSize: const Size(0, 36),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                  ),
+                if (onSeeGuide != null)
+                  TextButton.icon(
+                    onPressed: onSeeGuide,
+                    icon: const Icon(Icons.healing_rounded, size: 15, color: Resq.ready),
+                    label: Text('First aid', style: ResqType.caption(color: Resq.ready)),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: Resq.space2),
+                      minimumSize: const Size(0, 36),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                  ),
+              ],
+            ),
+          ],
+        ],
       ),
     );
   }

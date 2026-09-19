@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/constants/app_assets.dart';
 import '../../../core/router/app_router.dart';
 import '../../../core/theme/tokens.dart';
 import '../../../core/theme/typography.dart';
@@ -97,17 +98,28 @@ class _MyRequestsScreenState extends ConsumerState<MyRequestsScreen> {
             ),
             data: (items) {
               if (items.isEmpty) {
-                return Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(Resq.space5),
-                  decoration: BoxDecoration(
-                    color: Resq.surfaceAlt,
-                    borderRadius: BorderRadius.circular(Resq.radiusCard),
-                  ),
-                  child: Text(
-                    'No emergencies raised from this phone in the last day. '
-                    'That is the good outcome.',
-                    style: ResqType.body(color: Resq.inkSoft),
+                return Padding(
+                  padding: const EdgeInsets.only(top: Resq.space4),
+                  child: Column(
+                    children: [
+                      Image.asset(
+                        AppAssets.stateNoRequests,
+                        height: 150,
+                        fit: BoxFit.contain,
+                        errorBuilder: (_, __, ___) => const Icon(
+                          Icons.inbox_rounded,
+                          size: 72,
+                          color: Resq.inkFaint,
+                        ),
+                      ),
+                      const SizedBox(height: Resq.space4),
+                      Text(
+                        'No emergencies raised from this phone in the last day. '
+                        'That is the good outcome.',
+                        textAlign: TextAlign.center,
+                        style: ResqType.body(color: Resq.inkMuted),
+                      ),
+                    ],
                   ),
                 );
               }

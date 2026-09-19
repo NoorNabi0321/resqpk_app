@@ -1,31 +1,41 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../../../core/constants/app_colors.dart';
 import '../../../core/connectivity/connectivity_provider.dart';
-import '../../../core/location/location_provider.dart';
+import '../../../core/constants/app_assets.dart';
 import '../../../core/location/gps_persistence_provider.dart';
+import '../../../core/location/location_provider.dart';
 import '../../../core/map/resqpk_map.dart';
 import '../../../core/realtime/realtime_provider.dart';
 import '../../../core/router/app_router.dart';
 import '../../../core/theme/tokens.dart';
 import '../../../core/theme/typography.dart';
+import '../../../core/widgets/map_card.dart';
+import '../../../core/widgets/offline_banner.dart';
+import '../../../core/widgets/resq_card.dart';
 import '../../../core/widgets/sos_button.dart';
+import '../../../core/widgets/state_views.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../camps/providers/camps_provider.dart';
+import '../../first_aid/data/models/first_aid_guide_model.dart';
 import '../../first_aid/providers/first_aid_provider.dart';
 import '../../sos/providers/session_provider.dart';
 import '../../sos/providers/sos_provider.dart';
 import '../../sos/widgets/reporter_phone_sheet.dart';
 import '../providers/home_providers.dart';
 
-/// Patient home — light, scrollable dashboard.
+/// The patient's home screen: one enormous button, and everything else in
+/// service of it.
+///
+/// The order on this screen is the order of urgency — where you are, how to get
+/// help, what is near you. Nothing above the SOS button, and nothing that has
+/// to be scrolled past to reach it.
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
 
@@ -48,6 +58,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
       ref.read(firstAidProvider.notifier).syncInBackground();
       ref.read(authProvider.notifier).checkAuthStatus();
       ref.read(connectivityServiceProvider).initialize();
+      // They may have just come back from the system settings screen having
+      // granted location — ask again rather than keeping the warning up.
+      ref.invalidate(locationAccessProvider);
     }
   }
 
@@ -65,7 +78,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
     } catch (_) {
       // The SOS trigger surfaces location errors when the user actually needs help.
     }
-    if (mounted) setState(() {});
+    if (mounted) {
+      ref.invalidate(locationAccessProvider);
+      setState(() {});
+    }
   }
 
   @override
@@ -92,34 +108,52 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
 
     final user = ref.watch(currentUserProvider);
     final sos = ref.watch(sosProvider);
-    final isOnline = ref.watch(isOnlineProvider).value ?? true;
     final positionAsync = ref.watch(currentPositionStreamProvider);
-    final locationService = ref.read(locationServiceProvider);
-    final position = positionAsync.asData?.value ?? locationService.lastPosition;
+    final position = positionAsync.asData?.value ?? ref.read(locationServiceProvider).lastPosition;
 
-    // No Scaffold, drawer or bottom bar here any more: AppShell owns the page
-    // chrome, so this screen is only its content. The drawer duplicated the
-    // tabs and hid the driver entry behind a hamburger menu.
+    // No Scaffold, drawer or bottom bar here: AppShell owns the page chrome and
+    // the active-case banner, so this screen is only its content.
     return SafeArea(
       bottom: false,
-      child: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+      child: Column(
         children: [
-          // No account, no invented identity: the header shows a name only when
-          // there is a real one to show.
-          _Header(name: user?.fullName ?? ref.watch(sessionProvider).reporterName),
-          const SizedBox(height: 14),
-          _LocationBanner(isOnline: isOnline),
-          const SizedBox(height: 22),
-          // The SOS control sits above everything else on the screen. Nothing
-          // should be scrolled past to reach it.
-          _SosSection(state: sos),
-          const SizedBox(height: 22),
-          _MapCard(lat: position?.latitude, lng: position?.longitude),
-          const SizedBox(height: 14),
-          const _NearbyHospitals(),
-          const SizedBox(height: 14),
-          const _CampsCard(),
+          const OfflineBanner(),
+          Expanded(
+            child: RefreshIndicator(
+              color: Resq.brandInk,
+              onRefresh: () async {
+                ref.invalidate(nearbyHospitalsProvider);
+                ref.invalidate(nearbyCampsProvider);
+                ref.invalidate(currentAddressProvider);
+                ref.invalidate(locationAccessProvider);
+              },
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(
+                  Resq.space4,
+                  Resq.space3,
+                  Resq.space4,
+                  Resq.space6,
+                ),
+                children: [
+                  // No account, no invented identity: a name appears only when
+                  // there is a real one.
+                  _Header(name: user?.fullName ?? ref.watch(sessionProvider).reporterName),
+                  const SizedBox(height: Resq.space4),
+                  const _LocationStrip(),
+                  const SizedBox(height: Resq.space5),
+                  _SosSection(state: sos),
+                  const SizedBox(height: Resq.space6),
+                  _MapPreview(lat: position?.latitude, lng: position?.longitude),
+                  const SizedBox(height: Resq.space5),
+                  const _HospitalsTile(),
+                  const SizedBox(height: Resq.space5),
+                  const _CampsTile(),
+                  const SizedBox(height: Resq.space5),
+                  const _FirstAidTile(),
+                ],
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -129,8 +163,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
 // --- Header ------------------------------------------------------------------
 
 class _Header extends StatelessWidget {
-  final String? name;
   const _Header({required this.name});
+
+  final String? name;
 
   @override
   Widget build(BuildContext context) {
@@ -140,76 +175,25 @@ class _Header extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  Text(
-                    'ResQ',
-                    style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.w800,
-                      color: AppLight.textPrimary,
-                      letterSpacing: -0.5,
-                    ),
-                  ),
-                  Text(
-                    'PK',
-                    style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.w800,
-                      color: AppLight.red,
-                      letterSpacing: -0.5,
-                    ),
-                  ),
-                ],
-              ),
-              Text(
-                'Swift Response, Smart Coordination',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: 10.5, color: AppLight.textSecondary),
-              ),
+              Image.asset(AppAssets.logoWordmark, height: 30, alignment: Alignment.centerLeft),
+              const SizedBox(height: 2),
+              Text('Emergency help in Hyderabad', style: ResqType.caption()),
             ],
           ),
         ),
-        _CircleButton(
-          icon: Icons.notifications_none,
-          badge: true,
-          onTap: () => ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Alerts are coming soon')),
-          ),
+        _RoundAction(
+          icon: Icons.receipt_long_rounded,
+          tooltip: 'My requests',
+          onTap: () => context.push(Routes.myRequests),
         ),
         if (name != null && name!.isNotEmpty) ...[
-          const SizedBox(width: 10),
-          Flexible(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  name!,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 13.5,
-                    fontWeight: FontWeight.w700,
-                    color: AppLight.textPrimary,
-                  ),
-                ),
-                Text('Patient', style: TextStyle(fontSize: 11.5, color: AppLight.blue)),
-              ],
-            ),
-          ),
-          const SizedBox(width: 8),
+          const SizedBox(width: Resq.space2),
           CircleAvatar(
-            radius: 20,
-            backgroundColor: AppLight.blueTint,
+            radius: 21,
+            backgroundColor: Resq.brandTint,
             child: Text(
               name![0].toUpperCase(),
-              style: TextStyle(
-                color: AppLight.blue,
-                fontWeight: FontWeight.bold,
-                fontSize: 16,
-              ),
+              style: ResqType.bodyStrong(color: Resq.brandInk),
             ),
           ),
         ],
@@ -218,69 +202,63 @@ class _Header extends StatelessWidget {
   }
 }
 
-class _CircleButton extends StatelessWidget {
+class _RoundAction extends StatelessWidget {
+  const _RoundAction({required this.icon, required this.onTap, this.tooltip});
+
   final IconData icon;
   final VoidCallback onTap;
-  final bool badge;
-
-  const _CircleButton({required this.icon, required this.onTap, this.badge = false});
+  final String? tooltip;
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 44,
-        height: 44,
-        decoration: BoxDecoration(
-          color: AppLight.card,
-          shape: BoxShape.circle,
-          border: Border.all(color: AppLight.border),
-        ),
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            Icon(icon, color: AppLight.textPrimary, size: 21),
-            if (badge)
-              Positioned(
-                top: 10,
-                right: 11,
-                child: Container(
-                  width: 8,
-                  height: 8,
-                  decoration: BoxDecoration(
-                    color: AppLight.red,
-                    shape: BoxShape.circle,
-                    border: Border.all(color: AppLight.card, width: 1.5),
-                  ),
-                ),
-              ),
-          ],
+    return Tooltip(
+      message: tooltip ?? '',
+      child: InkWell(
+        onTap: onTap,
+        customBorder: const CircleBorder(),
+        child: Container(
+          width: Resq.tapTarget,
+          height: Resq.tapTarget,
+          decoration: BoxDecoration(
+            color: Resq.surface,
+            shape: BoxShape.circle,
+            border: Border.all(color: Resq.border),
+          ),
+          child: Icon(icon, size: 21, color: Resq.inkSoft),
         ),
       ),
     );
   }
 }
 
-// --- Location banner ---------------------------------------------------------
+// --- Location ----------------------------------------------------------------
 
-class _LocationBanner extends ConsumerWidget {
-  final bool isOnline;
-  const _LocationBanner({required this.isOnline});
+/// Where the ambulance will be sent, stated plainly — and, when the phone will
+/// not say, what to do about it.
+///
+/// This is not decoration. An SOS without a position is a phone call to someone
+/// who cannot tell you where they are, so a refused permission is treated as a
+/// problem to fix, not a banner to ignore.
+class _LocationStrip extends ConsumerWidget {
+  const _LocationStrip();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final access = ref.watch(locationAccessProvider).value;
+
+    if (access != null && access != LocationAccess.granted) {
+      return _LocationProblem(access: access);
+    }
+
     final address = ref.watch(currentAddressProvider);
+    final isOnline = ref.watch(isOnlineProvider).value ?? true;
+    final locating = address.isLoading || (address.value ?? '').isEmpty;
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+      padding: const EdgeInsets.all(Resq.space3),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [AppLight.navy, AppLight.navyDeep],
-          begin: Alignment.centerLeft,
-          end: Alignment.centerRight,
-        ),
-        borderRadius: BorderRadius.circular(16),
+        color: Resq.navy,
+        borderRadius: BorderRadius.circular(Resq.radiusCard),
       ),
       child: Row(
         children: [
@@ -288,58 +266,158 @@ class _LocationBanner extends ConsumerWidget {
             width: 38,
             height: 38,
             decoration: BoxDecoration(
-              color: AppLight.blue.withValues(alpha: 0.22),
+              color: Colors.white.withValues(alpha: 0.12),
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.my_location, color: Colors.white, size: 19),
+            child: const Icon(Icons.my_location_rounded, color: Colors.white, size: 19),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: Resq.space3),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Your Location',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 14.5,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 2),
+                Text('Your location', style: ResqType.caption(color: Colors.white70)),
+                const SizedBox(height: 1),
                 Text(
-                  address.asData?.value ?? 'Locating…',
+                  locating ? 'Finding you…' : address.value!,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: Color(0xFFB9C3D4), fontSize: 12.5),
+                  style: ResqType.bodyStrong(color: Colors.white),
                 ),
               ],
             ),
           ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-            decoration: BoxDecoration(
-              color: (isOnline ? AppLight.green : AppLight.red).withValues(alpha: 0.18),
-              borderRadius: BorderRadius.circular(999),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
+          _LiveDot(isOnline: isOnline),
+        ],
+      ),
+    );
+  }
+}
+
+class _LiveDot extends StatelessWidget {
+  const _LiveDot({required this.isOnline});
+
+  final bool isOnline;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = isOnline ? Resq.ready : Resq.decision;
+    final dot = Container(
+      width: 7,
+      height: 7,
+      decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+    );
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.16),
+        borderRadius: BorderRadius.circular(Resq.radiusPill),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // A live indicator that does not move is just a coloured circle.
+          isOnline
+              ? dot.animate(onPlay: (c) => c.repeat(reverse: true)).fadeIn(duration: 900.ms)
+              : dot,
+          const SizedBox(width: 7),
+          Text(isOnline ? 'Live' : 'Offline', style: ResqType.micro(color: color)),
+        ],
+      ),
+    );
+  }
+}
+
+/// Location is off, refused, or blocked — with the one action that fixes it.
+class _LocationProblem extends ConsumerStatefulWidget {
+  const _LocationProblem({required this.access});
+
+  final LocationAccess access;
+
+  @override
+  ConsumerState<_LocationProblem> createState() => _LocationProblemState();
+}
+
+class _LocationProblemState extends ConsumerState<_LocationProblem> {
+  bool _busy = false;
+
+  ({String title, String body, String action}) get _copy => switch (widget.access) {
+        LocationAccess.serviceOff => (
+            title: 'Location is switched off',
+            body: 'The ambulance is sent to where you are, so the phone has to know.',
+            action: 'Turn on location',
+          ),
+        LocationAccess.blocked => (
+            title: 'Location is blocked',
+            body: 'ResQPK cannot ask again — it has to be allowed in Settings.',
+            action: 'Open settings',
+          ),
+        _ => (
+            title: 'Allow location',
+            body: 'Without it the crew has only a phone number to find you by.',
+            action: 'Allow',
+          ),
+      };
+
+  Future<void> _fix() async {
+    setState(() => _busy = true);
+    try {
+      switch (widget.access) {
+        case LocationAccess.serviceOff:
+          await Geolocator.openLocationSettings();
+        case LocationAccess.blocked:
+          await Geolocator.openAppSettings();
+        case LocationAccess.denied:
+        case LocationAccess.granted:
+          await ref.read(locationServiceProvider).getCurrentPosition();
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _busy = false);
+        ref.invalidate(locationAccessProvider);
+        ref.invalidate(currentAddressProvider);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final copy = _copy;
+
+    return Container(
+      padding: const EdgeInsets.all(Resq.space4),
+      decoration: BoxDecoration(
+        color: Resq.decisionTint,
+        borderRadius: BorderRadius.circular(Resq.radiusCard),
+        border: Border.all(color: Resq.decision.withValues(alpha: 0.4)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.location_off_rounded, color: Resq.decision, size: 20),
+          const SizedBox(width: Resq.space3),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  width: 7,
-                  height: 7,
-                  decoration: BoxDecoration(
-                    color: isOnline ? const Color(0xFF3DDC84) : AppLight.redSoft,
-                    shape: BoxShape.circle,
-                  ),
-                ),
-                const SizedBox(width: 7),
-                Text(
-                  isOnline ? 'Live' : 'Offline',
-                  style: TextStyle(
-                    color: isOnline ? const Color(0xFF3DDC84) : AppLight.redSoft,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
+                Text(copy.title, style: ResqType.bodyStrong()),
+                const SizedBox(height: 2),
+                Text(copy.body, style: ResqType.caption(color: Resq.inkSoft)),
+                const SizedBox(height: Resq.space2),
+                SizedBox(
+                  height: 38,
+                  child: ElevatedButton(
+                    onPressed: _busy ? null : _fix,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Resq.decision,
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(horizontal: Resq.space4),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(Resq.radiusControl),
+                      ),
+                    ),
+                    child: Text(copy.action, style: ResqType.caption(color: Colors.white)),
                   ),
                 ),
               ],
@@ -351,31 +429,35 @@ class _LocationBanner extends ConsumerWidget {
   }
 }
 
-// --- Map card ----------------------------------------------------------------
+// --- Map ---------------------------------------------------------------------
 
-class _MapCard extends ConsumerStatefulWidget {
+/// A small map: where you are, and the nearest help around you.
+///
+/// Deliberately not interactive beyond panning — the full map lives on the
+/// tracking screen, and a tall scrollable map here would fight the page scroll.
+class _MapPreview extends ConsumerStatefulWidget {
+  const _MapPreview({required this.lat, required this.lng});
+
   final double? lat;
   final double? lng;
 
-  const _MapCard({required this.lat, required this.lng});
-
   @override
-  ConsumerState<_MapCard> createState() => _MapCardState();
+  ConsumerState<_MapPreview> createState() => _MapPreviewState();
 }
 
-class _MapCardState extends ConsumerState<_MapCard> {
+class _MapPreviewState extends ConsumerState<_MapPreview> {
   final MapController _controller = MapController();
-  bool _centeredOnUser = false;
+  bool _centered = false;
 
   LatLng get _center => LatLng(widget.lat ?? 25.3792, widget.lng ?? 68.3683);
 
   @override
-  void didUpdateWidget(covariant _MapCard oldWidget) {
+  void didUpdateWidget(covariant _MapPreview oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (!_centeredOnUser && widget.lat != null && widget.lng != null) {
-      _centeredOnUser = true;
+    if (!_centered && widget.lat != null && widget.lng != null) {
+      _centered = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _controller.move(_center, MapSpec.navigationZoom);
+        if (mounted) _controller.move(_center, MapSpec.cityZoom);
       });
     }
   }
@@ -386,137 +468,85 @@ class _MapCardState extends ConsumerState<_MapCard> {
     final hospitals = ref.watch(nearbyHospitalsProvider).asData?.value ?? const [];
     final camps = ref.watch(nearbyCampsProvider).asData?.value ?? const [];
 
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(18),
-      child: SizedBox(
-        height: 300,
-        child: Stack(
-          children: [
-            FlutterMap(
-              mapController: _controller,
-              options: MapOptions(
-                initialCenter: _center,
-                initialZoom: MapSpec.navigationZoom,
-                minZoom: 3,
-                maxZoom: 19,
-                interactionOptions: const InteractionOptions(
-                  flags: InteractiveFlag.drag |
-                      InteractiveFlag.flingAnimation |
-                      InteractiveFlag.pinchZoom |
-                      InteractiveFlag.pinchMove |
-                      InteractiveFlag.doubleTapZoom,
-                ),
-              ),
-              children: [
-                const ResQPKTileLayer(light: true),
-                // Soft accuracy halo around the user, as in the reference.
-                if (hasFix)
-                  CircleLayer(
-                    circles: [
-                      CircleMarker(
-                        point: _center,
-                        radius: 90,
-                        useRadiusInMeter: false,
-                        color: AppLight.red.withValues(alpha: 0.10),
-                        borderColor: AppLight.red.withValues(alpha: 0.18),
-                        borderStrokeWidth: 1,
-                      ),
-                    ],
-                  ),
-                MarkerLayer(
-                  markers: [
-                    for (final h in hospitals.take(6))
-                      if (h['lat'] != null && h['lng'] != null)
-                        Marker(
-                          point: LatLng(
-                            double.tryParse('${h['lat']}') ?? 0,
-                            double.tryParse('${h['lng']}') ?? 0,
-                          ),
-                          width: MapSpec.touchTarget,
-                          height: MapSpec.pinHeight,
-                          alignment: Alignment.topCenter,
-                          child: const MapDestinationPin(
-                            color: AppLight.red,
-                            icon: Icons.local_hospital,
-                          ),
-                        ),
-                    for (final c in camps.take(6))
-                      Marker(
-                        point: LatLng(c.lat, c.lng),
-                        width: MapSpec.touchTarget,
-                        height: MapSpec.pinHeight,
-                        alignment: Alignment.topCenter,
-                        child: const MapDestinationPin(
-                          color: AppLight.green,
-                          icon: Icons.medical_services,
-                        ),
-                      ),
-                    if (hasFix)
-                      Marker(
-                        point: _center,
-                        width: MapSpec.touchTarget,
-                        height: MapSpec.touchTarget,
-                        child: const UserLocationDot(color: AppLight.blue),
-                      ),
-                  ],
+    return MapCard(
+      height: 210,
+      overlay: Align(
+        alignment: Alignment.bottomRight,
+        child: Padding(
+          padding: const EdgeInsets.all(Resq.space3),
+          child: MapControlButton(
+            icon: Icons.my_location_rounded,
+            tooltip: 'Centre on me',
+            onTap: () {
+              if (!hasFix) return;
+              _controller.move(_center, MapSpec.navigationZoom);
+            },
+          ),
+        ),
+      ),
+      child: FlutterMap(
+        mapController: _controller,
+        options: MapOptions(
+          initialCenter: _center,
+          initialZoom: MapSpec.cityZoom,
+          minZoom: 3,
+          maxZoom: 19,
+          interactionOptions: const InteractionOptions(
+            flags: InteractiveFlag.drag | InteractiveFlag.pinchZoom | InteractiveFlag.pinchMove,
+          ),
+        ),
+        children: [
+          const ResQPKTileLayer(light: true),
+          if (hasFix)
+            CircleLayer(
+              circles: [
+                CircleMarker(
+                  point: _center,
+                  radius: 70,
+                  color: Resq.info.withValues(alpha: 0.10),
+                  borderColor: Resq.info.withValues(alpha: 0.25),
+                  borderStrokeWidth: 1,
                 ),
               ],
             ),
-            Positioned(
-              right: 12,
-              bottom: 46,
-              child: _MapFab(
-                icon: Icons.my_location,
-                onTap: () {
-                  if (widget.lat == null || widget.lng == null) return;
-                  _controller.move(_center, MapSpec.navigationZoom);
-                },
-              ),
-            ),
-            Positioned(
-              right: 12,
-              bottom: 0,
-              child: _MapFab(
-                icon: Icons.navigation_outlined,
-                onTap: () async {
-                  if (widget.lat == null) return;
-                  final uri = Uri.parse(
-                    'https://www.google.com/maps/search/?api=1&query=${widget.lat},${widget.lng}',
-                  );
-                  if (await canLaunchUrl(uri)) {
-                    await launchUrl(uri, mode: LaunchMode.externalApplication);
-                  }
-                },
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _MapFab extends StatelessWidget {
-  final IconData icon;
-  final VoidCallback onTap;
-
-  const _MapFab({required this.icon, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 42,
-        height: 42,
-        decoration: BoxDecoration(
-          color: AppLight.card,
-          shape: BoxShape.circle,
-          boxShadow: [
-            BoxShadow(color: Colors.black.withValues(alpha: 0.12), blurRadius: 8),
-          ],
-        ),
-        child: Icon(icon, color: AppLight.blue, size: 20),
+          MarkerLayer(
+            markers: [
+              for (final h in hospitals.take(6))
+                if (h['lat'] != null && h['lng'] != null)
+                  Marker(
+                    point: LatLng(
+                      double.tryParse('${h['lat']}') ?? 0,
+                      double.tryParse('${h['lng']}') ?? 0,
+                    ),
+                    width: MapSpec.touchTarget,
+                    height: MapSpec.pinHeight,
+                    alignment: Alignment.topCenter,
+                    child: const MapDestinationPin(
+                      color: Resq.critical,
+                      icon: Icons.local_hospital,
+                    ),
+                  ),
+              for (final c in camps.take(6))
+                Marker(
+                  point: LatLng(c.lat, c.lng),
+                  width: MapSpec.touchTarget,
+                  height: MapSpec.pinHeight,
+                  alignment: Alignment.topCenter,
+                  child: const MapDestinationPin(
+                    color: Resq.ready,
+                    icon: Icons.medical_services,
+                  ),
+                ),
+              if (hasFix)
+                Marker(
+                  point: _center,
+                  width: MapSpec.touchTarget,
+                  height: MapSpec.touchTarget,
+                  child: const UserLocationDot(color: Resq.info),
+                ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -524,78 +554,82 @@ class _MapFab extends StatelessWidget {
 
 // --- Nearby hospitals --------------------------------------------------------
 
-class _NearbyHospitals extends ConsumerWidget {
-  const _NearbyHospitals();
+class _HospitalsTile extends ConsumerWidget {
+  const _HospitalsTile();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final hospitalsAsync = ref.watch(nearbyHospitalsProvider);
-    final hospitals = hospitalsAsync.asData?.value ?? const [];
+    final async = ref.watch(nearbyHospitalsProvider);
 
-    return _SectionCard(
-      title: 'Nearby Hospitals',
-      trailing: hospitals.isEmpty
-          ? null
-          : GestureDetector(
-              onTap: () => _showAll(context, hospitals),
-              child: Text(
-                'View all',
-                style: TextStyle(
-                  color: AppLight.blue,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-      child: hospitalsAsync.isLoading
-          ? const Padding(
-              padding: EdgeInsets.symmetric(vertical: 18),
-              child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
-            )
-          : hospitals.isEmpty
-              ? Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  child: Text(
-                    'No hospitals found nearby.',
-                    style: TextStyle(color: AppLight.textSecondary, fontSize: 13),
-                  ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SectionHeader(
+          title: 'Emergency hospitals',
+          action: async.asData?.value.isNotEmpty == true
+              ? TextButton(
+                  onPressed: () => _showAll(context, async.value!),
+                  child: Text('See all', style: ResqType.caption(color: Resq.brandInk)),
                 )
-              : Column(
-                  children: hospitals
-                      .take(3)
-                      .map((h) => _HospitalTile(hospital: h))
-                      .toList(),
+              : null,
+        ),
+        async.when(
+          loading: () => const LoadingSkeleton(lines: 2, height: 76),
+          error: (_, __) => ResqCard(
+            child: Row(
+              children: [
+                const Icon(Icons.cloud_off_rounded, size: 18, color: Resq.inkMuted),
+                const SizedBox(width: Resq.space3),
+                Expanded(
+                  child: Text(
+                    'Could not load hospitals. Pull down to try again.',
+                    style: ResqType.body(color: Resq.inkMuted),
+                  ),
                 ),
+              ],
+            ),
+          ),
+          data: (hospitals) {
+            if (hospitals.isEmpty) {
+              return ResqCard(
+                child: Text(
+                  'No emergency hospital found near you yet.',
+                  style: ResqType.body(color: Resq.inkMuted),
+                ),
+              );
+            }
+            return Column(
+              children: [
+                for (final h in hospitals.take(3)) _HospitalRow(hospital: h),
+              ],
+            );
+          },
+        ),
+      ],
     );
   }
 
   void _showAll(BuildContext context, List<Map<String, dynamic>> hospitals) {
     showModalBottomSheet<void>(
       context: context,
-      backgroundColor: AppLight.card,
+      backgroundColor: Resq.surface,
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(Resq.radiusCard)),
       ),
       builder: (_) => SafeArea(
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(18, 18, 18, 12),
+          padding: const EdgeInsets.fromLTRB(Resq.space4, Resq.space5, Resq.space4, Resq.space4),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(
-                'Nearby Hospitals',
-                style: TextStyle(
-                  fontSize: 17,
-                  fontWeight: FontWeight.w700,
-                  color: AppLight.textPrimary,
-                ),
-              ),
-              const SizedBox(height: 10),
+              const SectionHeader(title: 'Emergency hospitals'),
               Flexible(
-                child: ListView(
+                child: ListView.builder(
                   shrinkWrap: true,
-                  children: hospitals.map((h) => _HospitalTile(hospital: h)).toList(),
+                  itemCount: hospitals.length,
+                  itemBuilder: (_, i) => _HospitalRow(hospital: hospitals[i]),
                 ),
               ),
             ],
@@ -606,9 +640,10 @@ class _NearbyHospitals extends ConsumerWidget {
   }
 }
 
-class _HospitalTile extends StatelessWidget {
+class _HospitalRow extends StatelessWidget {
+  const _HospitalRow({required this.hospital});
+
   final Map<String, dynamic> hospital;
-  const _HospitalTile({required this.hospital});
 
   Future<void> _call(String? phone) async {
     if (phone == null || phone.isEmpty) return;
@@ -621,233 +656,240 @@ class _HospitalTile extends StatelessWidget {
     final name = hospital['name']?.toString() ?? 'Hospital';
     final distance = hospital['distanceText']?.toString() ?? '';
     final phone = hospital['emergency_phone']?.toString();
+    final open247 = hospital['has_emergency_ward'] == true;
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: AppLight.cardAlt,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppLight.border),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 52,
-            height: 52,
-            decoration: BoxDecoration(
-              color: AppLight.red.withValues(alpha: 0.08),
-              borderRadius: BorderRadius.circular(11),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: Resq.space3),
+      child: ResqCard(
+        padding: const EdgeInsets.all(Resq.space3),
+        accent: open247 ? Resq.ready : null,
+        child: Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: Resq.criticalTint,
+                borderRadius: BorderRadius.circular(Resq.radiusControl),
+              ),
+              child: const Icon(Icons.local_hospital_rounded, color: Resq.critical, size: 22),
             ),
-            child: Icon(Icons.local_hospital, color: AppLight.red, size: 25),
-          ),
-          const SizedBox(width: 11),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  name,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 13.5,
-                    fontWeight: FontWeight.w700,
-                    color: AppLight.textPrimary,
-                    height: 1.25,
-                  ),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  '$distance away',
-                  style: TextStyle(fontSize: 12, color: AppLight.textSecondary),
-                ),
-                if (hospital['has_emergency_ward'] == true) ...[
-                  const SizedBox(height: 5),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: AppLight.greenTint,
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Text(
-                      '24/7 Available',
-                      style: TextStyle(
-                        fontSize: 10.5,
-                        color: AppLight.green,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
+            const SizedBox(width: Resq.space3),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(name, maxLines: 2, overflow: TextOverflow.ellipsis, style: ResqType.bodyStrong()),
+                  const SizedBox(height: 2),
+                  Row(
+                    children: [
+                      if (distance.isNotEmpty)
+                        Text('$distance away', style: ResqType.caption()),
+                      if (distance.isNotEmpty && open247)
+                        Text(' · ', style: ResqType.caption()),
+                      if (open247) Text('Emergency ward', style: ResqType.caption(color: Resq.ready)),
+                    ],
                   ),
                 ],
-              ],
-            ),
-          ),
-          GestureDetector(
-            onTap: () => _call(phone),
-            child: Container(
-              width: 38,
-              height: 38,
-              decoration: BoxDecoration(
-                color: AppLight.card,
-                shape: BoxShape.circle,
-                border: Border.all(color: AppLight.border),
               ),
-              child: Icon(Icons.phone, color: AppLight.green, size: 18),
             ),
-          ),
-        ],
+            if (phone != null && phone.isNotEmpty)
+              IconButton(
+                onPressed: () => _call(phone),
+                icon: const Icon(Icons.call_rounded, color: Resq.ready),
+                constraints: const BoxConstraints(
+                  minWidth: Resq.tapTarget,
+                  minHeight: Resq.tapTarget,
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
 }
 
-// --- SOS banner --------------------------------------------------------------
+// --- Camps -------------------------------------------------------------------
 
-class _CampsCard extends ConsumerWidget {
-  const _CampsCard();
+class _CampsTile extends ConsumerWidget {
+  const _CampsTile();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final camps = ref.watch(nearbyCampsProvider).asData?.value ?? const [];
+    final async = ref.watch(nearbyCampsProvider);
 
-    return _SectionCard(
-      title: 'Nearby Medical Camps',
-      trailing: camps.isEmpty
-          ? null
-          : GestureDetector(
-              onTap: () => context.push(Routes.camps),
-              child: Text(
-                'View all',
-                style: TextStyle(
-                  color: AppLight.blue,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SectionHeader(
+          title: 'Free medical camps',
+          action: async.asData?.value.isNotEmpty == true
+              ? TextButton(
+                  onPressed: () => context.go(Routes.camps),
+                  child: Text('See all', style: ResqType.caption(color: Resq.brandInk)),
+                )
+              : null,
+        ),
+        async.when(
+          loading: () => const LoadingSkeleton(lines: 1, height: 76),
+          error: (_, __) => ResqCard(
+            child: Text('Could not load camps.', style: ResqType.body(color: Resq.inkMuted)),
+          ),
+          data: (camps) {
+            if (camps.isEmpty) {
+              return ResqCard(
+                child: Text(
+                  'No camps running near you this week.',
+                  style: ResqType.body(color: Resq.inkMuted),
                 ),
-              ),
-            ),
-      child: camps.isEmpty
-          ? Text(
-              'No camps running near you.',
-              style: TextStyle(fontSize: 12.5, color: AppLight.textSecondary),
-            )
-          : GestureDetector(
-              onTap: () => context.push(Routes.camps),
+              );
+            }
+            final camp = camps.first;
+            return ResqCard(
+              padding: const EdgeInsets.all(Resq.space3),
+              onTap: () => context.go('${Routes.camps}/${camp.id}'),
               child: Row(
                 children: [
                   Container(
-                    width: 40,
-                    height: 40,
+                    width: 44,
+                    height: 44,
                     decoration: BoxDecoration(
-                      color: AppLight.greenTint,
-                      borderRadius: BorderRadius.circular(10),
+                      color: Resq.readyTint,
+                      borderRadius: BorderRadius.circular(Resq.radiusControl),
                     ),
-                    child: Icon(Icons.medical_services, color: AppLight.green, size: 20),
+                    child: const Icon(Icons.medical_services_rounded, color: Resq.ready, size: 22),
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: Resq.space3),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        Text(camp.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: ResqType.bodyStrong()),
+                        const SizedBox(height: 2),
                         Text(
-                          camps.first.name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 13.5,
-                            fontWeight: FontWeight.w700,
-                            color: AppLight.textPrimary,
-                          ),
-                        ),
-                        const SizedBox(height: 3),
-                        Row(
-                          children: [
-                            Text(
-                              camps.first.distanceText ?? '',
-                              style: TextStyle(fontSize: 11.5, color: AppLight.textSecondary),
-                            ),
-                            const SizedBox(width: 8),
-                            Container(
-                              width: 6,
-                              height: 6,
-                              decoration: BoxDecoration(
-                                color: AppLight.green,
-                                shape: BoxShape.circle,
-                              ),
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              'Ongoing',
-                              style: TextStyle(fontSize: 11.5, color: AppLight.green),
-                            ),
-                          ],
+                          [
+                            if (camp.distanceText != null) camp.distanceText!,
+                            if (camp.daysRemaining != null)
+                              camp.daysRemaining! <= 0
+                                  ? 'Last day'
+                                  : '${camp.daysRemaining} days left',
+                          ].join(' · '),
+                          style: ResqType.caption(),
                         ),
                       ],
                     ),
                   ),
-                  Icon(Icons.chevron_right, color: AppLight.textFaint, size: 20),
+                  const Icon(Icons.chevron_right_rounded, color: Resq.inkFaint),
                 ],
               ),
-            ),
+            );
+          },
+        ),
+      ],
     );
   }
 }
 
-// --- Quick actions -----------------------------------------------------------
+// --- First aid ---------------------------------------------------------------
 
-class _SectionCard extends StatelessWidget {
-  final String title;
-  final Widget child;
-  final Widget? trailing;
+/// Four guides, reachable in one tap.
+///
+/// Someone holding a bleeding arm is not going to browse a tab. The covers are
+/// here because a picture is recognised faster than a title when you are
+/// panicking.
+class _FirstAidTile extends ConsumerWidget {
+  const _FirstAidTile();
 
-  const _SectionCard({
-    required this.title,
-    required this.child,
-    this.trailing,
-  });
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(firstAidProvider);
+    final guides = state.guides.where((g) => FirstAidArt.hasArt(g.slug)).take(4).toList();
+    final fallback = state.guides.take(4).toList();
+    final shown = guides.isNotEmpty ? guides : fallback;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SectionHeader(
+          title: 'While you wait',
+          action: TextButton(
+            onPressed: () => context.go(Routes.firstAid),
+            child: Text('All guides', style: ResqType.caption(color: Resq.brandInk)),
+          ),
+        ),
+        if (state.isLoading && shown.isEmpty)
+          const LoadingSkeleton(lines: 1, height: 96)
+        else if (shown.isEmpty)
+          ResqCard(
+            child: Text(
+              'First-aid guides download the first time you are online.',
+              style: ResqType.body(color: Resq.inkMuted),
+            ),
+          )
+        else
+          SizedBox(
+            height: 112,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: shown.length,
+              separatorBuilder: (_, __) => const SizedBox(width: Resq.space3),
+              itemBuilder: (_, i) => _GuideChip(guide: shown[i]),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _GuideChip extends StatelessWidget {
+  const _GuideChip({required this.guide});
+
+  final FirstAidGuideModel guide;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppLight.card,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppLight.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Text(
-                  title,
-                  style: TextStyle(
-                    fontSize: 15.5,
-                    fontWeight: FontWeight.w700,
-                    color: AppLight.textPrimary,
-                  ),
-                ),
+    final cover = FirstAidArt.cover(guide.slug);
+
+    return GestureDetector(
+      onTap: () => context.go(Routes.guideDetail, extra: guide),
+      child: SizedBox(
+        width: 104,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              height: 72,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: Resq.brandTint,
+                borderRadius: BorderRadius.circular(Resq.radiusControl),
+                border: Border.all(color: Resq.border),
               ),
-              if (trailing != null) trailing!,
-            ],
-          ),
-          const SizedBox(height: 12),
-          child,
-        ],
+              clipBehavior: Clip.antiAlias,
+              child: cover != null
+                  ? Image.asset(cover, fit: BoxFit.cover)
+                  : const Icon(Icons.healing_rounded, color: Resq.brandInk),
+            ),
+            const SizedBox(height: Resq.space2),
+            Text(
+              guide.titleEn,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: ResqType.caption(color: Resq.ink),
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
-// --- Drawer ------------------------------------------------------------------
-
-
 // --- SOS ---------------------------------------------------------------------
 
-/// The reason the app exists, and now the largest thing on the screen.
+/// The reason the app exists, and the largest thing on the screen.
 ///
 /// The ring is driven by a local controller rather than the notifier's
 /// one-second timer: a ring that jumps in thirds looks broken, and the user
@@ -861,8 +903,7 @@ class _SosSection extends ConsumerStatefulWidget {
   ConsumerState<_SosSection> createState() => _SosSectionState();
 }
 
-class _SosSectionState extends ConsumerState<_SosSection>
-    with SingleTickerProviderStateMixin {
+class _SosSectionState extends ConsumerState<_SosSection> with SingleTickerProviderStateMixin {
   late final AnimationController _hold = AnimationController(
     vsync: this,
     duration: const Duration(seconds: SOSNotifier.holdSeconds),
@@ -945,10 +986,14 @@ class _SosSectionState extends ConsumerState<_SosSection>
           ),
         ),
         const SizedBox(height: Resq.space4),
-        Text(
-          _caption,
-          textAlign: TextAlign.center,
-          style: ResqType.body(color: Resq.inkMuted),
+        AnimatedSwitcher(
+          duration: const Duration(milliseconds: 250),
+          child: Text(
+            _caption,
+            key: ValueKey(_phase),
+            textAlign: TextAlign.center,
+            style: ResqType.body(color: Resq.inkMuted),
+          ),
         ),
         if (error != null) ...[
           const SizedBox(height: Resq.space3),
@@ -960,7 +1005,13 @@ class _SosSectionState extends ConsumerState<_SosSection>
               borderRadius: BorderRadius.circular(Resq.radiusControl),
               border: Border.all(color: Resq.critical.withValues(alpha: 0.3)),
             ),
-            child: Text(error, style: ResqType.caption(color: Resq.critical)),
+            child: Row(
+              children: [
+                const Icon(Icons.error_outline_rounded, size: 18, color: Resq.critical),
+                const SizedBox(width: Resq.space2),
+                Expanded(child: Text(error, style: ResqType.caption(color: Resq.critical))),
+              ],
+            ),
           ),
         ],
       ],

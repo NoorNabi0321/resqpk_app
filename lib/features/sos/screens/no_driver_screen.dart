@@ -3,25 +3,35 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../../../core/constants/app_colors.dart';
-import '../../../core/constants/app_text_styles.dart';
+import '../../../core/constants/app_assets.dart';
 import '../../../core/router/app_router.dart';
+import '../../../core/theme/tokens.dart';
+import '../../../core/theme/typography.dart';
+import '../../../core/widgets/primary_button.dart';
+import '../../../core/widgets/resq_card.dart';
 import '../providers/sos_provider.dart';
 
 class _Service {
+  const _Service(this.name, this.number, this.icon, this.color);
+
   final String name;
   final String number;
-  final String emoji;
-  const _Service(this.name, this.number, this.emoji);
+  final IconData icon;
+  final Color color;
 }
 
 const _services = [
-  _Service('Rescue 1122', '1122', '🚑'),
-  _Service('Edhi Foundation', '115', '🏥'),
-  _Service('Chhipa Welfare', '1020', '🩺'),
-  _Service('Police Emergency', '15', '👮'),
+  _Service('Rescue 1122', '1122', Icons.emergency_rounded, Resq.critical),
+  _Service('Edhi Foundation', '115', Icons.local_hospital_rounded, Resq.brandInk),
+  _Service('Chhipa Welfare', '1020', Icons.medical_services_rounded, Resq.ready),
+  _Service('Police Emergency', '15', Icons.local_police_rounded, Resq.info),
 ];
 
+/// Every nearby ambulance declined or timed out.
+///
+/// The worst screen in the app, so it does the one useful thing it can: hand
+/// over working phone numbers, large enough to tap without aiming, before
+/// offering to try again.
 class NoDriverScreen extends ConsumerWidget {
   const NoDriverScreen({super.key});
 
@@ -33,91 +43,81 @@ class NoDriverScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: Resq.canvas,
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.fromLTRB(Resq.space5, Resq.space4, Resq.space5, Resq.space4),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const SizedBox(height: 8),
-              Container(
-                height: 140,
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [AppColors.warningAmber, Color(0xFF7A5200)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
+              Center(
+                child: Image.asset(
+                  AppAssets.stateNoDriver,
+                  height: 160,
+                  fit: BoxFit.contain,
+                  errorBuilder: (_, __, ___) => const Icon(
+                    Icons.no_transfer_rounded,
+                    size: 96,
+                    color: Resq.decision,
                   ),
-                  borderRadius: BorderRadius.circular(24),
-                ),
-                child: const Center(
-                  child: Icon(Icons.no_transfer, color: Colors.white, size: 56),
                 ),
               ),
-              const SizedBox(height: 20),
-              Text('No Ambulance Available', style: AppTextStyles.display.copyWith(fontSize: 24)),
-              const SizedBox(height: 8),
+              const SizedBox(height: Resq.space4),
+              Text('No ambulance could take it', style: ResqType.title()),
+              const SizedBox(height: Resq.space2),
               Text(
-                'All drivers are busy. Please use these emergency numbers.',
-                style: AppTextStyles.body.copyWith(color: AppColors.textSecondary),
+                'Every ambulance nearby is busy. Call one of these now — they answer '
+                'without the app.',
+                style: ResqType.body(color: Resq.inkSoft),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: Resq.space5),
               Expanded(
                 child: ListView.separated(
                   itemCount: _services.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 12),
+                  separatorBuilder: (_, __) => const SizedBox(height: Resq.space3),
                   itemBuilder: (_, i) {
                     final s = _services[i];
-                    return InkWell(
+                    return ResqCard(
+                      padding: const EdgeInsets.all(Resq.space3),
+                      accent: s.color,
                       onTap: () => _call(s.number),
-                      borderRadius: BorderRadius.circular(16),
-                      child: Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: AppColors.surfaceTwo,
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: AppColors.borderGlass),
-                        ),
-                        child: Row(
-                          children: [
-                            Text(s.emoji, style: const TextStyle(fontSize: 26)),
-                            const SizedBox(width: 14),
-                            Expanded(child: Text(s.name, style: AppTextStyles.subtitle)),
-                            Text(
-                              s.number,
-                              style: AppTextStyles.title.copyWith(color: AppColors.sosRed),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 44,
+                            height: 44,
+                            decoration: BoxDecoration(
+                              color: s.color.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(Resq.radiusControl),
                             ),
-                            const SizedBox(width: 8),
-                            const Icon(Icons.phone, color: AppColors.confirmedGreen, size: 20),
-                          ],
-                        ),
+                            child: Icon(s.icon, color: s.color, size: 22),
+                          ),
+                          const SizedBox(width: Resq.space3),
+                          Expanded(child: Text(s.name, style: ResqType.bodyStrong())),
+                          Text(s.number, style: ResqType.title(color: s.color)),
+                          const SizedBox(width: Resq.space2),
+                          const Icon(Icons.call_rounded, color: Resq.ready, size: 20),
+                        ],
                       ),
                     );
                   },
                 ),
               ),
-              const SizedBox(height: 12),
-              SizedBox(
-                height: 54,
-                child: ElevatedButton(
-                  onPressed: () {
-                    ref.read(sosProvider.notifier).retry();
-                    context.go(Routes.home);
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.sosRed,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(27)),
-                  ),
-                  child: Text('Try Again', style: AppTextStyles.buttonLabel),
-                ),
+              const SizedBox(height: Resq.space3),
+              PrimaryButton.critical(
+                label: 'Try again',
+                icon: Icons.refresh_rounded,
+                onPressed: () {
+                  ref.read(sosProvider.notifier).retry();
+                  context.go(Routes.home);
+                },
               ),
               TextButton(
                 onPressed: () {
                   ref.read(sosProvider.notifier).reset();
                   context.go(Routes.home);
                 },
-                child: Text('Go Home', style: AppTextStyles.caption),
+                child: Text('Back to home', style: ResqType.button(color: Resq.inkSoft)),
               ),
             ],
           ),
