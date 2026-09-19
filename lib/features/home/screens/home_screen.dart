@@ -14,6 +14,9 @@ import '../../../core/location/gps_persistence_provider.dart';
 import '../../../core/map/resqpk_map.dart';
 import '../../../core/realtime/realtime_provider.dart';
 import '../../../core/router/app_router.dart';
+import '../../../core/theme/tokens.dart';
+import '../../../core/theme/typography.dart';
+import '../../../core/widgets/sos_button.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../camps/providers/camps_provider.dart';
 import '../../first_aid/providers/first_aid_provider.dart';
@@ -28,18 +31,11 @@ class HomeScreen extends ConsumerStatefulWidget {
   ConsumerState<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends ConsumerState<HomeScreen>
-    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
-  late final AnimationController _pulseController;
-
+class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _pulseController = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 2),
-    )..repeat();
     Future.microtask(_warmLocation);
     Future.microtask(_startGpsPersistence);
   }
@@ -73,7 +69,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _pulseController.dispose();
     super.dispose();
   }
 
@@ -111,12 +106,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
           _Header(name: user?.fullName ?? 'Patient'),
           const SizedBox(height: 14),
           _LocationBanner(isOnline: isOnline),
-          const SizedBox(height: 14),
+          const SizedBox(height: 22),
+          // The SOS control sits above everything else on the screen. Nothing
+          // should be scrolled past to reach it.
+          _SosSection(state: sos),
+          const SizedBox(height: 22),
           _MapCard(lat: position?.latitude, lng: position?.longitude),
           const SizedBox(height: 14),
           const _NearbyHospitals(),
-          const SizedBox(height: 14),
-          _SosBanner(state: sos, pulse: _pulseController),
           const SizedBox(height: 14),
           const _CampsCard(),
         ],
@@ -701,185 +698,6 @@ class _HospitalTile extends StatelessWidget {
 
 // --- SOS banner --------------------------------------------------------------
 
-class _SosBanner extends ConsumerWidget {
-  final SOSState state;
-  final Animation<double> pulse;
-
-  const _SosBanner({required this.state, required this.pulse});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final counting = state.isSosCountingDown;
-    final active = state.activeCaseId != null;
-    final searching = state.status == SOSStatus.searching && !active;
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 20),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [AppLight.red, AppLight.redSoft],
-          begin: Alignment.centerLeft,
-          end: Alignment.centerRight,
-        ),
-        borderRadius: BorderRadius.circular(18),
-        boxShadow: [
-          BoxShadow(color: AppLight.red.withValues(alpha: 0.3), blurRadius: 18, offset: const Offset(0, 6)),
-        ],
-      ),
-      child: Row(
-        children: [
-          const Expanded(
-            flex: 3,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'SOS',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 30,
-                    fontWeight: FontWeight.w800,
-                    height: 1,
-                  ),
-                ),
-                SizedBox(height: 4),
-                Text(
-                  'Tap for\nEmergency',
-                  style: TextStyle(color: Colors.white70, fontSize: 12.5, height: 1.3),
-                ),
-              ],
-            ),
-          ),
-          GestureDetector(
-            onLongPressStart: state.status == SOSStatus.idle
-                ? (_) => ref.read(sosProvider.notifier).startSOSCountdown()
-                : null,
-            onLongPressEnd: (_) {
-              if (state.isSosCountingDown) {
-                ref.read(sosProvider.notifier).cancelSOSCountdown();
-              }
-            },
-            child: AnimatedBuilder(
-              animation: pulse,
-              builder: (context, child) {
-                final t = counting ? 0.0 : pulse.value;
-                return SizedBox(
-                  width: 106,
-                  height: 106,
-                  child: Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      if (!counting)
-                        Container(
-                          width: 92 * (1 + t * 0.16),
-                          height: 92 * (1 + t * 0.16),
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: Colors.white.withValues(alpha: 0.45 * (1 - t)),
-                              width: 2,
-                            ),
-                          ),
-                        ),
-                      if (counting)
-                        SizedBox(
-                          width: 100,
-                          height: 100,
-                          child: CircularProgressIndicator(
-                            value: (10 - state.sosCountdownSeconds) / 10,
-                            strokeWidth: 5,
-                            color: Colors.white,
-                            backgroundColor: Colors.white24,
-                          ),
-                        ),
-                      Container(
-                        width: 88,
-                        height: 88,
-                        decoration: const BoxDecoration(
-                          color: Colors.white,
-                          shape: BoxShape.circle,
-                        ),
-                        child: child,
-                      ),
-                    ],
-                  ),
-                );
-              },
-              child: Center(
-                child: counting
-                    ? Text(
-                        '${state.sosCountdownSeconds}',
-                        style: TextStyle(
-                          color: AppLight.red,
-                          fontSize: 38,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      )
-                    : Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.emergency_share, color: AppLight.red, size: 30),
-                          Text(
-                            'SOS',
-                            style: TextStyle(
-                              color: AppLight.red,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                        ],
-                      ),
-              ),
-            ),
-          ),
-          Expanded(
-            flex: 3,
-            child: Padding(
-              padding: const EdgeInsets.only(left: 12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    counting
-                        ? 'Release to cancel'
-                        : searching
-                            ? 'Searching for the\nnearest ambulance…'
-                            : active
-                                ? 'Emergency active'
-                                : 'Press and hold\nfor 10 seconds',
-                    textAlign: TextAlign.right,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      height: 1.3,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  // A failed SOS must say so — this is the one action that
-                  // cannot be allowed to fail silently.
-                  Text(
-                    state.error ?? 'We will alert the\nnearest responders',
-                    textAlign: TextAlign.right,
-                    style: TextStyle(
-                      color: state.error != null ? Colors.white : Colors.white70,
-                      fontSize: 11.5,
-                      height: 1.3,
-                      fontWeight: state.error != null ? FontWeight.w700 : FontWeight.normal,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// --- Nearby camps ------------------------------------------------------------
-
 class _CampsCard extends ConsumerWidget {
   const _CampsCard();
 
@@ -1020,3 +838,105 @@ class _SectionCard extends StatelessWidget {
 
 // --- Drawer ------------------------------------------------------------------
 
+
+// --- SOS ---------------------------------------------------------------------
+
+/// The reason the app exists, and now the largest thing on the screen.
+///
+/// The ring is driven by a local controller rather than the notifier's
+/// one-second timer: a ring that jumps in thirds looks broken, and the user
+/// needs to see continuous progress to know the hold is working.
+class _SosSection extends ConsumerStatefulWidget {
+  const _SosSection({required this.state});
+
+  final SOSState state;
+
+  @override
+  ConsumerState<_SosSection> createState() => _SosSectionState();
+}
+
+class _SosSectionState extends ConsumerState<_SosSection>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _hold = AnimationController(
+    vsync: this,
+    duration: const Duration(seconds: SOSNotifier.holdSeconds),
+  );
+
+  @override
+  void dispose() {
+    _hold.dispose();
+    super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(covariant _SosSection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Cancelled elsewhere (case completed, error, cancel button) — put the ring
+    // back so the next hold starts from empty.
+    if (!widget.state.isSosCountingDown && _hold.value > 0 && _phase != SosButtonPhase.holding) {
+      _hold.reset();
+    }
+  }
+
+  SosButtonPhase get _phase {
+    final s = widget.state;
+    if (s.status == SOSStatus.searching) return SosButtonPhase.searching;
+    if (s.activeCaseId != null) return SosButtonPhase.active;
+    if (s.isSosCountingDown) return SosButtonPhase.holding;
+    return SosButtonPhase.idle;
+  }
+
+  String get _caption => switch (_phase) {
+        SosButtonPhase.idle => 'Hold for 3 seconds to call an ambulance',
+        SosButtonPhase.holding => 'Keep holding — let go to cancel',
+        SosButtonPhase.searching => 'Offering your emergency to nearby ambulances',
+        SosButtonPhase.active => 'An ambulance is assigned to you',
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    final error = widget.state.error;
+
+    return Column(
+      children: [
+        AnimatedBuilder(
+          animation: _hold,
+          builder: (_, __) => SosButton(
+            phase: _phase,
+            progress: _hold.value,
+            onHoldStart: () {
+              _hold.forward(from: 0);
+              ref.read(sosProvider.notifier).startSOSCountdown();
+            },
+            onHoldEnd: () {
+              if (_hold.status != AnimationStatus.completed) {
+                _hold.reverse();
+                ref.read(sosProvider.notifier).cancelSOSCountdown();
+              }
+            },
+            onTapWhenActive: () => context.push(Routes.tracking),
+          ),
+        ),
+        const SizedBox(height: Resq.space4),
+        Text(
+          _caption,
+          textAlign: TextAlign.center,
+          style: ResqType.body(color: Resq.inkMuted),
+        ),
+        if (error != null) ...[
+          const SizedBox(height: Resq.space3),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(Resq.space3),
+            decoration: BoxDecoration(
+              color: Resq.criticalTint,
+              borderRadius: BorderRadius.circular(Resq.radiusControl),
+              border: Border.all(color: Resq.critical.withValues(alpha: 0.3)),
+            ),
+            child: Text(error, style: ResqType.caption(color: Resq.critical)),
+          ),
+        ],
+      ],
+    );
+  }
+}

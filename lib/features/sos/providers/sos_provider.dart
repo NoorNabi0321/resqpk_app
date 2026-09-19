@@ -96,12 +96,19 @@ class SOSNotifier extends StateNotifier<SOSState> {
   SOSNotifier(this._repo, this._socketService, this._locationService)
       : super(const SOSState());
 
-  // Hold the SOS button: 10s countdown, then trigger.
+  /// How long the SOS button must be held.
+  ///
+  /// Was ten seconds, which is a very long time to hold a phone steady while
+  /// someone is bleeding — and long enough that people let go early, thinking
+  /// it had not worked. Three seconds is still deliberate enough to prevent
+  /// pocket triggers, and matches what phones use for their own emergency SOS.
+  static const int holdSeconds = 3;
+
   void startSOSCountdown() {
     if (state.isSosCountingDown) return;
     state = state.copyWith(
       isSosCountingDown: true,
-      sosCountdownSeconds: 10,
+      sosCountdownSeconds: holdSeconds,
       status: SOSStatus.countingDown,
       clearError: true,
     );
@@ -118,12 +125,12 @@ class SOSNotifier extends StateNotifier<SOSState> {
     });
   }
 
-  // Released before 10s → cancel.
+  // Released before the hold completes → cancel.
   void cancelSOSCountdown() {
     _countdownTimer?.cancel();
     state = state.copyWith(
       isSosCountingDown: false,
-      sosCountdownSeconds: 10,
+      sosCountdownSeconds: holdSeconds,
       status: SOSStatus.idle,
     );
   }
