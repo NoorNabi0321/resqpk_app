@@ -2,20 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hive_flutter/hive_flutter.dart';
-import 'package:share_plus/share_plus.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/constants/app_assets.dart';
-import '../../../core/router/app_router.dart';
 import '../../../core/theme/tokens.dart';
 import '../../../core/theme/typography.dart';
-import '../../../core/widgets/app_scaffold.dart';
 import '../../../core/widgets/step_slider.dart';
-import '../../sos/providers/sos_provider.dart';
 import '../data/models/first_aid_guide_model.dart';
 import '../providers/first_aid_provider.dart';
 
-/// One guide, one step at a time, with 1122 pinned to the bottom.
+/// One guide, one step at a time.
+///
+/// A takeover, not a tab: the tab bar is gone while you are following steps,
+/// because nothing on it is what you should be doing next. Back returns to the
+/// library with the tabs where they were.
 class GuideDetailScreen extends ConsumerStatefulWidget {
   const GuideDetailScreen({super.key, required this.guide});
 
@@ -38,108 +37,130 @@ class _GuideDetailScreenState extends ConsumerState<GuideDetailScreen> {
     await box.put('guides_read', ((box.get('guides_read') as int?) ?? 0) + 1);
   }
 
-  Future<void> _dial(String number) async {
-    final uri = Uri(scheme: 'tel', path: number);
-    if (await canLaunchUrl(uri)) await launchUrl(uri);
-  }
-
   @override
   Widget build(BuildContext context) {
     final lang = ref.watch(firstAidProvider).selectedLanguage;
-    final ur = lang == 'ur';
-    final hasActiveCase = ref.watch(sosProvider).activeCaseId != null;
+    final urdu = lang == 'ur';
     final g = widget.guide;
     final steps = g.getSteps(lang);
 
-    return AppScaffold(
-      title: g.getTitle(lang),
-      padding: const EdgeInsets.fromLTRB(Resq.space4, 0, Resq.space4, Resq.space3),
-      actions: [
-        _LangPill(
-          label: 'EN',
-          active: !ur,
-          onTap: () => ref.read(firstAidProvider.notifier).setLanguage('en'),
-        ),
-        const SizedBox(width: Resq.space2),
-        _LangPill(
-          label: 'اردو',
-          active: ur,
-          onTap: () => ref.read(firstAidProvider.notifier).setLanguage('ur'),
-        ),
-        IconButton(
-          tooltip: 'Share',
-          onPressed: () => Share.share(
-            '${g.getTitle(lang)} — first aid steps in the ResQPK app.',
-          ),
-          icon: const Icon(Icons.share_rounded, size: 20, color: Resq.inkSoft),
-        ),
-      ],
-      bottomBar: EmergencyCallBar(
-        onCall1122: () => _dial('1122'),
-        trailing: hasActiveCase
-            ? ElevatedButton(
-                onPressed: () => context.go(Routes.tracking),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Resq.critical,
-                  elevation: 0,
-                  minimumSize: const Size.fromHeight(Resq.tapTarget),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(Resq.radiusControl),
-                  ),
-                ),
-                child: Text('Back to ambulance', style: ResqType.button()),
-              )
-            : ElevatedButton(
-                onPressed: () => context.go(Routes.home),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Resq.brandInk,
-                  elevation: 0,
-                  minimumSize: const Size.fromHeight(Resq.tapTarget),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(Resq.radiusControl),
-                  ),
-                ),
-                child: Text('Open SOS', style: ResqType.button()),
-              ),
-      ),
-      body: StepSlider(
-        rtl: ur,
-        steps: [
-          for (var i = 0; i < steps.length; i++)
-            StepSliderItem(
-              number: steps[i].step,
-              title: steps[i].title,
-              instruction: steps[i].instruction,
-              // Artwork is matched by slug, and only five guides have it so
-              // far; the rest fall back to a numbered card.
-              image: FirstAidArt.step(g.slug, i + 1),
+    return Scaffold(
+      backgroundColor: Resq.canvas,
+      body: SafeArea(
+        bottom: false,
+        child: Column(
+          children: [
+            _Header(
+              // The category, not the full title: "Choking" fits and is the
+              // word someone is looking for. "First Aid for Choking" did not
+              // fit, and ellipsised to "First Aid for…", which named nothing.
+              title: urdu ? g.getTitle(lang) : (g.category.isNotEmpty ? g.category : g.titleEn),
+              languageLabel: urdu ? 'English' : 'اردو',
+              onBack: () => context.pop(),
+              onToggleLanguage: ref.read(firstAidProvider.notifier).toggleLanguage,
             ),
+            Expanded(
+              child: StepSlider(
+                rtl: urdu,
+                steps: [
+                  for (var i = 0; i < steps.length; i++)
+                    StepSliderItem(
+                      number: steps[i].step,
+                      title: steps[i].title,
+                      instruction: steps[i].instruction,
+                      // Artwork is matched by slug, and only five guides have
+                      // it so far; the rest fall back to a numbered card.
+                      image: FirstAidArt.step(g.slug, i + 1),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Compact header: a small back button, the name, and the language switch.
+///
+/// Everything here is smaller than the app's standard page header — this
+/// screen's job is the illustration, and the chrome should take as little of
+/// it as it can while staying tappable.
+class _Header extends StatelessWidget {
+  const _Header({
+    required this.title,
+    required this.languageLabel,
+    required this.onBack,
+    required this.onToggleLanguage,
+  });
+
+  final String title;
+  final String languageLabel;
+  final VoidCallback onBack;
+  final VoidCallback onToggleLanguage;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(Resq.space2, Resq.space2, Resq.space4, Resq.space2),
+      child: Row(
+        children: [
+          InkWell(
+            onTap: onBack,
+            customBorder: const CircleBorder(),
+            child: const SizedBox(
+              // 40dp of touch area around a 20dp glyph: still comfortably
+              // tappable, but it no longer competes with the title.
+              width: 40,
+              height: 40,
+              child: Icon(Icons.arrow_back_rounded, size: 20, color: Resq.ink),
+            ),
+          ),
+          const SizedBox(width: Resq.space2),
+          Expanded(
+            child: Text(
+              title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: ResqType.section(),
+            ),
+          ),
+          const SizedBox(width: Resq.space3),
+          _LanguageButton(label: languageLabel, onTap: onToggleLanguage),
         ],
       ),
     );
   }
 }
 
-class _LangPill extends StatelessWidget {
-  const _LangPill({required this.label, required this.active, required this.onTap});
+class _LanguageButton extends StatelessWidget {
+  const _LanguageButton({required this.label, required this.onTap});
 
   final String label;
-  final bool active;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: Resq.space3, vertical: 7),
-        decoration: BoxDecoration(
-          color: active ? Resq.brandInk : Resq.surfaceAlt,
-          borderRadius: BorderRadius.circular(Resq.radiusPill),
-        ),
-        child: Text(
-          label,
-          style: ResqType.caption(color: active ? Colors.white : Resq.inkSoft),
+    return Material(
+      color: Resq.brandInk,
+      borderRadius: BorderRadius.circular(Resq.radiusPill),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(Resq.radiusPill),
+        child: Container(
+          height: 36,
+          constraints: const BoxConstraints(minWidth: 76),
+          padding: const EdgeInsets.symmetric(horizontal: Resq.space3),
+          alignment: Alignment.center,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.translate_rounded, size: 14, color: Colors.white),
+              const SizedBox(width: 5),
+              Text(label, style: ResqType.caption(color: Colors.white)),
+            ],
+          ),
         ),
       ),
     );

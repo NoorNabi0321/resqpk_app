@@ -52,11 +52,14 @@ class Routes {
   // Shell tabs
   static const String home = '/home';
   static const String firstAid = '/first-aid';
-  static const String guideDetail = '/first-aid/guide';
   static const String camps = '/camps';
   static const String more = '/more';
 
   // Takeovers — full screen, outside the tabs
+  //
+  // A guide is one of them: while someone is following steps, nothing on the
+  // tab bar is what they should do next, and the picture wants the room.
+  static const String guideDetail = '/guide';
   static const String myRequests = '/my-requests';
   static const String tracking = '/tracking';
   static const String noDriver = '/no-driver';
@@ -172,14 +175,6 @@ final appRouter = GoRouter(
             GoRoute(
               path: Routes.firstAid,
               pageBuilder: (c, s) => _tab(const FirstAidScreen()),
-              routes: [
-                // Nested, so the tabs stay visible and back returns to the list.
-                GoRoute(
-                  path: 'guide',
-                  pageBuilder: (c, s) =>
-                      _page(GuideDetailScreen(guide: s.extra as FirstAidGuideModel)),
-                ),
-              ],
             ),
           ],
         ),
@@ -228,6 +223,10 @@ final appRouter = GoRouter(
     GoRoute(path: Routes.profile, pageBuilder: (c, s) => _page(const ProfileScreen())),
 
     // --- Takeovers: an emergency owns the whole screen ----------------------
+    GoRoute(
+      path: Routes.guideDetail,
+      pageBuilder: (c, s) => _page(GuideDetailScreen(guide: s.extra as FirstAidGuideModel)),
+    ),
     GoRoute(path: Routes.myRequests, pageBuilder: (c, s) => _page(const MyRequestsScreen())),
     GoRoute(path: Routes.tracking, pageBuilder: (c, s) => _page(const TrackingScreen())),
     GoRoute(path: Routes.noDriver, pageBuilder: (c, s) => _page(const NoDriverScreen())),

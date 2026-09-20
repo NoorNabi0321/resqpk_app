@@ -854,7 +854,9 @@ class _GuideChip extends StatelessWidget {
     final cover = FirstAidArt.cover(guide.slug);
 
     return GestureDetector(
-      onTap: () => context.go(Routes.guideDetail, extra: guide),
+      // Pushed, not gone to: a guide is a takeover now, and back should return
+      // here rather than unwinding the whole shell.
+      onTap: () => context.push(Routes.guideDetail, extra: guide),
       child: SizedBox(
         width: 104,
         child: Column(

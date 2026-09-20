@@ -23,14 +23,10 @@ class StepSliderItem {
 
 /// First aid, one step at a time.
 ///
-/// The old screen stacked every step in a scrolling list of collapsible cards.
-/// That is a reference document, and someone kneeling next to a casualty is not
-/// reading a reference document: they need one instruction, big enough to read
-/// at arm's length, and a way to get to the next one without losing their place.
-///
-/// So: one step per page, the illustration doing most of the work, and a
-/// position indicator that says how much is left. Swipe or tap — both work,
-/// because one hand may be busy.
+/// The picture takes the screen and the words sit under it on a dark panel —
+/// the two things do different jobs, so they get different grounds. Swipe the
+/// picture or use the arrows beside the text; both move the same step, because
+/// one hand may be holding a wound.
 class StepSlider extends StatefulWidget {
   const StepSlider({
     super.key,
@@ -64,7 +60,7 @@ class _StepSliderState extends State<StepSlider> {
     HapticFeedback.selectionClick();
     _controller.animateToPage(
       index,
-      duration: const Duration(milliseconds: 250),
+      duration: const Duration(milliseconds: 260),
       curve: Curves.easeOutCubic,
     );
   }
@@ -77,7 +73,7 @@ class _StepSliderState extends State<StepSlider> {
       );
     }
 
-    final last = _index == widget.steps.length - 1;
+    final step = widget.steps[_index];
 
     return Directionality(
       textDirection: widget.rtl ? TextDirection.rtl : TextDirection.ltr,
@@ -91,52 +87,16 @@ class _StepSliderState extends State<StepSlider> {
                 setState(() => _index = i);
                 widget.onStepChanged?.call(i);
               },
-              itemBuilder: (_, i) => _StepPage(step: widget.steps[i], rtl: widget.rtl),
+              itemBuilder: (_, i) => _StepImage(step: widget.steps[i]),
             ),
           ),
-          const SizedBox(height: Resq.space3),
-          _Dots(
-            count: widget.steps.length,
+          _StepPanel(
+            step: step,
             index: _index,
-            onTap: _goTo,
-          ),
-          const SizedBox(height: Resq.space3),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: _index == 0 ? null : () => _goTo(_index - 1),
-                  style: OutlinedButton.styleFrom(
-                    minimumSize: const Size.fromHeight(Resq.tapTarget),
-                    side: BorderSide(color: Resq.border),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(Resq.radiusControl),
-                    ),
-                  ),
-                  child: Text('Back', style: ResqType.button(color: Resq.inkSoft)),
-                ),
-              ),
-              const SizedBox(width: Resq.space3),
-              Expanded(
-                flex: 2,
-                child: ElevatedButton(
-                  onPressed: last ? null : () => _goTo(_index + 1),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Resq.brandInk,
-                    disabledBackgroundColor: Resq.surfaceAlt,
-                    elevation: 0,
-                    minimumSize: const Size.fromHeight(Resq.tapTarget),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(Resq.radiusControl),
-                    ),
-                  ),
-                  child: Text(
-                    last ? 'Last step' : 'Next step',
-                    style: ResqType.button(color: last ? Resq.inkMuted : Colors.white),
-                  ),
-                ),
-              ),
-            ],
+            total: widget.steps.length,
+            rtl: widget.rtl,
+            onPrevious: _index == 0 ? null : () => _goTo(_index - 1),
+            onNext: _index == widget.steps.length - 1 ? null : () => _goTo(_index + 1),
           ),
         ],
       ),
@@ -144,67 +104,41 @@ class _StepSliderState extends State<StepSlider> {
   }
 }
 
-class _StepPage extends StatelessWidget {
-  const _StepPage({required this.step, required this.rtl});
+class _StepImage extends StatelessWidget {
+  const _StepImage({required this.step});
 
   final StepSliderItem step;
-  final bool rtl;
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Expanded(
-          child: Container(
-            decoration: BoxDecoration(
-              color: Resq.surface,
-              borderRadius: BorderRadius.circular(Resq.radiusCard),
-              border: Border.all(color: Resq.border),
-            ),
-            clipBehavior: Clip.antiAlias,
-            child: step.image == null
-                ? _NumberPlaceholder(number: step.number)
-                : Image.asset(
-                    step.image!,
-                    fit: BoxFit.cover,
-                    // Artwork is still missing for some guides; a step with no
-                    // picture must still be readable, never a broken box.
-                    errorBuilder: (_, __, ___) => _NumberPlaceholder(number: step.number),
-                  ),
-          ),
+    if (step.image == null) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(Resq.space4, Resq.space2, Resq.space4, Resq.space4),
+        child: _NumberPlaceholder(number: step.number),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(Resq.space4, Resq.space2, Resq.space4, Resq.space4),
+      child: Container(
+        width: double.infinity,
+        decoration: BoxDecoration(
+          // The illustrations are drawn on white, so they get a white card
+          // rather than sitting as a hard square on the cream page.
+          color: Resq.surface,
+          borderRadius: BorderRadius.circular(Resq.radiusCard),
+          border: Border.all(color: Resq.border),
         ),
-        const SizedBox(height: Resq.space4),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              width: 30,
-              height: 30,
-              alignment: Alignment.center,
-              decoration: const BoxDecoration(color: Resq.brandInk, shape: BoxShape.circle),
-              child: Text('${step.number}', style: ResqType.caption(color: Colors.white)),
-            ),
-            const SizedBox(width: Resq.space3),
-            Expanded(child: Text(step.title, style: ResqType.section())),
-          ],
+        clipBehavior: Clip.antiAlias,
+        alignment: Alignment.center,
+        child: Image.asset(
+          step.image!,
+          // Contain, never cover: a cropped first-aid illustration can lose
+          // the hands, and the hands are the instruction.
+          fit: BoxFit.contain,
+          errorBuilder: (_, __, ___) => _NumberPlaceholder(number: step.number),
         ),
-        const SizedBox(height: Resq.space2),
-        // Scrollable so a long instruction never overflows on a short phone —
-        // and never gets silently clipped, which in first aid means a missing
-        // instruction.
-        SizedBox(
-          height: 96,
-          child: SingleChildScrollView(
-            child: Text(
-              step.instruction,
-              style: rtl
-                  ? ResqType.nastaliq(size: 17, color: Resq.ink)
-                  : ResqType.body(color: Resq.ink).copyWith(fontSize: 17, height: 1.5),
-            ),
-          ),
-        ),
-      ],
+      ),
     );
   }
 }
@@ -217,12 +151,15 @@ class _NumberPlaceholder extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      color: Resq.brandTint,
+      decoration: BoxDecoration(
+        color: Resq.brandTint,
+        borderRadius: BorderRadius.circular(Resq.radiusCard),
+      ),
       alignment: Alignment.center,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text('$number', style: ResqType.display(color: Resq.brandInk).copyWith(fontSize: 64)),
+          Text('$number', style: ResqType.display(color: Resq.brandInk).copyWith(fontSize: 72)),
           Text('Step', style: ResqType.caption(color: Resq.brandInk)),
         ],
       ),
@@ -230,12 +167,153 @@ class _NumberPlaceholder extends StatelessWidget {
   }
 }
 
+/// The dark panel the instruction lives on.
+///
+/// Dark because the illustration above it is bright and full of white: a light
+/// card underneath made the two blur together, and the words are what someone
+/// is actually trying to read.
+class _StepPanel extends StatelessWidget {
+  const _StepPanel({
+    required this.step,
+    required this.index,
+    required this.total,
+    required this.rtl,
+    required this.onPrevious,
+    required this.onNext,
+  });
+
+  final StepSliderItem step;
+  final int index;
+  final int total;
+  final bool rtl;
+  final VoidCallback? onPrevious;
+  final VoidCallback? onNext;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      decoration: const BoxDecoration(
+        color: Resq.navy,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(Resq.space3, Resq.space4, Resq.space3, Resq.space4),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _Dots(count: total, index: index),
+              const SizedBox(height: Resq.space4),
+              Row(
+                children: [
+                  _ArrowButton(
+                    icon: Icons.chevron_left_rounded,
+                    onTap: onPrevious,
+                    tooltip: 'Previous step',
+                  ),
+                  Expanded(
+                    child: Column(
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Container(
+                              width: 26,
+                              height: 26,
+                              alignment: Alignment.center,
+                              decoration: const BoxDecoration(
+                                color: Resq.brand,
+                                shape: BoxShape.circle,
+                              ),
+                              child: Text(
+                                '${step.number}',
+                                style: ResqType.micro(color: Colors.white),
+                              ),
+                            ),
+                            const SizedBox(width: Resq.space2),
+                            Flexible(
+                              child: Text(
+                                step.title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                textAlign: TextAlign.center,
+                                style: rtl
+                                    ? ResqType.nastaliq(size: 17, color: Colors.white)
+                                    : ResqType.section(color: Colors.white),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: Resq.space2),
+                        // Cream on navy: the same warm paper colour the rest of
+                        // the app is written on, so the voice does not change.
+                        Text(
+                          step.instruction,
+                          textAlign: TextAlign.center,
+                          style: rtl
+                              ? ResqType.nastaliq(size: 16, color: Resq.canvas)
+                              : ResqType.body(color: Resq.canvas).copyWith(
+                                  fontSize: 16,
+                                  height: 1.5,
+                                ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  _ArrowButton(
+                    icon: Icons.chevron_right_rounded,
+                    onTap: onNext,
+                    tooltip: 'Next step',
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ArrowButton extends StatelessWidget {
+  const _ArrowButton({required this.icon, required this.onTap, required this.tooltip});
+
+  final IconData icon;
+  final VoidCallback? onTap;
+  final String tooltip;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = onTap != null;
+
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        onTap: onTap,
+        customBorder: const CircleBorder(),
+        child: SizedBox(
+          width: Resq.tapTarget,
+          height: Resq.tapTarget,
+          child: Icon(
+            icon,
+            size: 30,
+            // The heading's colour, dimmed when there is nowhere to go — the
+            // end of a guide should be visible before it is tapped for.
+            color: enabled ? Colors.white : Colors.white.withValues(alpha: 0.25),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _Dots extends StatelessWidget {
-  const _Dots({required this.count, required this.index, required this.onTap});
+  const _Dots({required this.count, required this.index});
 
   final int count;
   final int index;
-  final ValueChanged<int> onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -243,20 +321,15 @@ class _Dots extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         for (var i = 0; i < count; i++)
-          GestureDetector(
-            onTap: () => onTap(i),
-            behavior: HitTestBehavior.opaque,
-            child: Padding(
-              // Small dots, but a finger-sized tap area around each.
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                width: i == index ? 22 : 8,
-                height: 8,
-                decoration: BoxDecoration(
-                  color: i == index ? Resq.brandInk : Resq.border,
-                  borderRadius: BorderRadius.circular(Resq.radiusPill),
-                ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 3),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              width: i == index ? 22 : 7,
+              height: 7,
+              decoration: BoxDecoration(
+                color: i == index ? Resq.brand : Colors.white.withValues(alpha: 0.28),
+                borderRadius: BorderRadius.circular(Resq.radiusPill),
               ),
             ),
           ),
@@ -267,9 +340,8 @@ class _Dots extends StatelessWidget {
 
 /// The number that works when nothing else does.
 ///
-/// Pinned to the bottom of every first-aid screen: reading a guide means help
-/// is not there yet, and 1122 does not need the internet, an account, or this
-/// app to be working properly.
+/// Kept for screens that still want it pinned to the bottom; the guide screen
+/// itself is now deliberately bare, so the illustration owns the page.
 class EmergencyCallBar extends StatelessWidget {
   const EmergencyCallBar({super.key, required this.onCall1122, this.trailing});
 
