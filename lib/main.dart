@@ -22,11 +22,21 @@ Future<void> main() async {
 
   await Hive.initFlutter();
 
+  // First aid must be there before anyone needs it, account or not. The
+  // bundled copy seeds the cache on a fresh install; the sync then replaces it
+  // with the current guides whenever there is a connection.
+  //
+  // This used to sit inside the logged-in branch below, which meant a patient
+  // with no account — now the normal case — never pre-fetched anything and saw
+  // an empty First Aid tab the first time they opened it offline.
+  final firstAid = FirstAidRepository();
+  await firstAid.primeCacheFromBundle();
+  firstAid.syncInBackground(); // fire-and-forget content refresh
+
   // Register for push notifications if already logged in (best-effort).
   final savedToken = await SecureStorage.getToken();
   if (savedToken != null && savedToken.isNotEmpty) {
     await FCMService.initialize();
-    FirstAidRepository().syncInBackground(); // fire-and-forget content refresh
   }
 
   runApp(const ProviderScope(child: ResQPKApp()));

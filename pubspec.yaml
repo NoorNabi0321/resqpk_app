@@ -126,6 +126,9 @@ flutter:
     - assets/brand/splash-logo.webp
     - assets/animations/
     - assets/illustrations/
+    # The guides themselves, so first aid works on a phone that has never been
+    # online. Regenerate with: curl <api>/api/first-aid | jq '.data.guides'
+    - assets/first_aid/guides.json
     - assets/first_aid/cpr/
     - assets/first_aid/choking/
     - assets/first_aid/bleeding/

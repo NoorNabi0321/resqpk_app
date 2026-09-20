@@ -381,7 +381,7 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
 
     setState(() => _confirmingHospital = true);
     try {
-      await _repo.changeHospital(caseId, id);
+      await _repo.changeHospital(caseId, id, caseToken: _caseToken(caseId));
       ref.read(sosProvider.notifier).applyHospitalChange(
             id: id,
             name: hospital['name']?.toString(),

@@ -26,6 +26,12 @@ class AppAssets {
   static const String onboardingHospital = 'assets/illustrations/onboarding-hospital.webp';
   static const String onboardingChoice = 'assets/illustrations/onboarding-choice.webp';
 
+  /// The first-aid guides, compiled into the app.
+  ///
+  /// So a phone that has never had a connection still has them. Refreshed from
+  /// the backend whenever there is internet; this is the floor, not the source.
+  static const String firstAidGuides = 'assets/first_aid/guides.json';
+
   // --- States ---------------------------------------------------------------
   static const String stateNoDriver = 'assets/illustrations/state-no-driver.webp';
   static const String stateLocationDenied = 'assets/illustrations/state-location-denied.webp';

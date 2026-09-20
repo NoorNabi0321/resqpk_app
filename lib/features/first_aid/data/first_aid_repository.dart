@@ -1,8 +1,10 @@
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:hive_flutter/hive_flutter.dart';
 
+import '../../../core/constants/app_assets.dart';
 import '../../../core/network/api_client.dart';
 import 'models/first_aid_guide_model.dart';
 
@@ -46,6 +48,7 @@ class FirstAidRepository {
     try {
       final res = await apiClient.get('/api/first-aid');
       final guides = (res['data']?['guides'] as List?) ?? [];
+      if (guides.isEmpty) throw Exception('empty guide list');
       await box.put(_cacheDataKey, jsonEncode(guides));
       await box.put(_cacheTimestampKey, DateTime.now().toIso8601String());
       return guides
@@ -54,7 +57,40 @@ class FirstAidRepository {
     } catch (e) {
       debugPrint('First aid fetch failed, using cache: $e');
       if (cachedJson != null) return _parse(cachedJson);
+      // Nothing cached: a fresh install that has never had a connection. The
+      // guides ship inside the APK for exactly this — "call an ambulance and
+      // follow these steps" cannot depend on a network that is often the first
+      // thing to fail in an emergency.
+      return _bundledGuides();
+    }
+  }
+
+  /// The copy of the guides compiled into the app.
+  ///
+  /// Used only when there is no cache at all. Once the phone has been online
+  /// once, the cached copy is newer and wins.
+  Future<List<FirstAidGuideModel>> _bundledGuides() async {
+    try {
+      final json = await rootBundle.loadString(AppAssets.firstAidGuides);
+      return _parse(json);
+    } catch (e) {
+      debugPrint('Bundled first aid guides unavailable: $e');
       return [];
+    }
+  }
+
+  /// Seeds the Hive cache from the bundled copy on first run, so the guides are
+  /// there before anyone opens the tab — and before the first SOS.
+  Future<void> primeCacheFromBundle() async {
+    final box = await _box();
+    if (box.get(_cacheDataKey) != null) return;
+    try {
+      final json = await rootBundle.loadString(AppAssets.firstAidGuides);
+      await box.put(_cacheDataKey, json);
+      // Deliberately no timestamp: the copy in the APK is as old as the build,
+      // so it stays "stale" and the next online run replaces it.
+    } catch (e) {
+      debugPrint('Could not prime first aid cache: $e');
     }
   }
 
@@ -84,9 +120,12 @@ class FirstAidRepository {
     if (stale) await getGuides(forceRefresh: true);
   }
 
+  /// True whenever the guides can be shown with no connection — which, since
+  /// they ship with the app, is always.
   Future<bool> isCacheAvailable() async {
     final box = await _box();
-    return box.get(_cacheDataKey) != null;
+    if (box.get(_cacheDataKey) != null) return true;
+    return (await _bundledGuides()).isNotEmpty;
   }
 
   List<FirstAidGuideModel> searchGuides(

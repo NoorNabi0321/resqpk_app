@@ -129,11 +129,16 @@ class SOSRepository {
   }
 
   // PUT /api/cases/:id/hospital → change destination hospital mid-case.
-  Future<Map<String, dynamic>> changeHospital(String caseId, String hospitalId) async {
+  Future<Map<String, dynamic>> changeHospital(
+    String caseId,
+    String hospitalId, {
+    String? caseToken,
+  }) async {
     try {
       final res = await apiClient.put(
         '/api/cases/$caseId/hospital',
         data: {'hospitalId': hospitalId},
+        caseToken: caseToken,
       );
       return _data(res);
     } catch (e) {
