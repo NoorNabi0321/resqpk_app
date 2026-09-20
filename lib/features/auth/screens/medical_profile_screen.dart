@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../core/constants/app_colors.dart';
-import '../../../core/constants/app_text_styles.dart';
+import '../../../core/theme/tokens.dart';
+import '../../../core/theme/typography.dart';
 import '../../../core/router/app_router.dart';
 import '../../../core/widgets/glass_text_field.dart';
 import '../../../core/widgets/primary_button.dart';
@@ -81,11 +81,12 @@ class _MedicalProfileScreenState extends ConsumerState<MedicalProfileScreen> {
   Widget build(BuildContext context) {
     final loading = ref.watch(authProvider).isLoading;
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: Resq.canvas,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
+        foregroundColor: Resq.ink,
         automaticallyImplyLeading: false,
-        title: Text('Your Medical Profile', style: AppTextStyles.title),
+        title: Text('Your Medical Profile', style: ResqType.title()),
       ),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -94,10 +95,10 @@ class _MedicalProfileScreenState extends ConsumerState<MedicalProfileScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text('This helps us prepare hospitals before you arrive',
-                  style: AppTextStyles.body.copyWith(color: AppColors.textSecondary)),
+                  style: ResqType.body().copyWith(color: Resq.inkSoft)),
               const SizedBox(height: 4),
               Text('You can update this anytime from your profile',
-                  style: AppTextStyles.caption),
+                  style: ResqType.caption()),
               const SizedBox(height: 16),
               Row(
                 children: [
@@ -108,25 +109,25 @@ class _MedicalProfileScreenState extends ConsumerState<MedicalProfileScreen> {
               ),
               const SizedBox(height: 24),
 
-              Text('Blood Group', style: AppTextStyles.subtitle),
+              Text('Blood Group', style: ResqType.section()),
               const SizedBox(height: 8),
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
                 children: _bloodGroups
                     .map((b) => _pill(b, _blood == b, () => setState(() => _blood = b),
-                        AppColors.confirmedGreen))
+                        Resq.ready))
                     .toList(),
               ),
               const SizedBox(height: 20),
 
-              Text('Gender', style: AppTextStyles.subtitle),
+              Text('Gender', style: ResqType.section()),
               const SizedBox(height: 8),
               Wrap(
                 spacing: 8,
                 children: _genders
                     .map((g) => _pill(g[0].toUpperCase() + g.substring(1), _gender == g,
-                        () => setState(() => _gender = g), AppColors.infoBlue))
+                        () => setState(() => _gender = g), Resq.info))
                     .toList(),
               ),
               const SizedBox(height: 24),
@@ -138,7 +139,7 @@ class _MedicalProfileScreenState extends ConsumerState<MedicalProfileScreen> {
               _chipSection('Current Medications', _medicationCtl, _medications),
               const SizedBox(height: 24),
 
-              Text('Emergency Contact', style: AppTextStyles.subtitle),
+              Text('Emergency Contact', style: ResqType.section()),
               const SizedBox(height: 8),
               GlassTextField(label: 'Contact Name', controller: _ecName),
               const SizedBox(height: 12),
@@ -154,7 +155,7 @@ class _MedicalProfileScreenState extends ConsumerState<MedicalProfileScreen> {
 
               PrimaryButton(
                 label: 'Save & Continue',
-                color: AppColors.confirmedGreen,
+                color: Resq.ready,
                 loading: loading,
                 onPressed: _save,
               ),
@@ -163,7 +164,7 @@ class _MedicalProfileScreenState extends ConsumerState<MedicalProfileScreen> {
                 child: TextButton(
                   onPressed: () => context.go(Routes.home),
                   child: Text('Skip for now',
-                      style: AppTextStyles.caption.copyWith(color: AppColors.textSecondary)),
+                      style: ResqType.caption().copyWith(color: Resq.inkSoft)),
                 ),
               ),
             ],
@@ -177,13 +178,13 @@ class _MedicalProfileScreenState extends ConsumerState<MedicalProfileScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
       decoration: BoxDecoration(
-        color: active ? AppColors.sosRed.withValues(alpha: 0.15) : AppColors.surfaceTwo,
-        border: Border.all(color: active ? AppColors.sosRed : AppColors.borderGlass),
+        color: active ? Resq.critical.withValues(alpha: 0.15) : Resq.surfaceAlt,
+        border: Border.all(color: active ? Resq.critical : Resq.border),
         borderRadius: BorderRadius.circular(20),
       ),
       child: Text(label,
-          style: AppTextStyles.caption
-              .copyWith(color: active ? AppColors.sosRed : AppColors.textSecondary)),
+          style: ResqType.caption()
+              .copyWith(color: active ? Resq.critical : Resq.inkSoft)),
     );
   }
 
@@ -195,13 +196,13 @@ class _MedicalProfileScreenState extends ConsumerState<MedicalProfileScreen> {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         decoration: BoxDecoration(
           color: selected ? selColor : Colors.transparent,
-          border: Border.all(color: selected ? selColor : AppColors.borderGlass),
+          border: Border.all(color: selected ? selColor : Resq.border),
           borderRadius: BorderRadius.circular(12),
         ),
         child: Text(
           label,
-          style: AppTextStyles.body.copyWith(
-            color: selected ? Colors.white : AppColors.textPrimary,
+          style: ResqType.body().copyWith(
+            color: selected ? Colors.white : Resq.ink,
             fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
           ),
         ),
@@ -213,14 +214,14 @@ class _MedicalProfileScreenState extends ConsumerState<MedicalProfileScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(title, style: AppTextStyles.subtitle),
+        Text(title, style: ResqType.section()),
         const SizedBox(height: 8),
         Row(
           children: [
             Expanded(child: GlassTextField(label: 'Add $title', controller: ctl)),
             const SizedBox(width: 8),
             IconButton(
-              icon: const Icon(Icons.add_circle, color: AppColors.infoBlue, size: 32),
+              icon: const Icon(Icons.add_circle, color: Resq.info, size: 32),
               onPressed: () {
                 final v = ctl.text.trim();
                 if (v.isNotEmpty) {
@@ -242,9 +243,9 @@ class _MedicalProfileScreenState extends ConsumerState<MedicalProfileScreen> {
               children: list
                   .map((e) => Chip(
                         label: Text(e,
-                            style: AppTextStyles.caption.copyWith(color: Colors.white)),
-                        backgroundColor: AppColors.surfaceThree,
-                        deleteIconColor: AppColors.textSecondary,
+                            style: ResqType.caption().copyWith(color: Colors.white)),
+                        backgroundColor: Resq.surfaceAlt,
+                        deleteIconColor: Resq.inkSoft,
                         onDeleted: () => setState(() => list.remove(e)),
                       ))
                   .toList(),

@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../core/constants/app_colors.dart';
-import '../../../core/constants/app_text_styles.dart';
+import '../../../core/theme/tokens.dart';
+import '../../../core/theme/typography.dart';
 import '../../../core/router/app_router.dart';
 import '../../../core/utils/validators.dart';
 import '../../../core/widgets/glass_text_field.dart';
@@ -53,8 +53,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     final loading = ref.watch(authProvider).isLoading;
     final roleLabel = _role == 'driver' ? 'Driver' : 'Patient';
     return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(backgroundColor: Colors.transparent),
+      backgroundColor: Resq.canvas,
+      appBar: AppBar(backgroundColor: Colors.transparent, foregroundColor: Resq.ink),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
@@ -63,10 +63,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text('Welcome Back, $roleLabel', style: AppTextStyles.display.copyWith(fontSize: 28)),
+                Text('Welcome Back, $roleLabel', style: ResqType.display().copyWith(fontSize: 28)),
                 const SizedBox(height: 8),
                 Text('Log in to continue',
-                    style: AppTextStyles.body.copyWith(color: AppColors.textSecondary)),
+                    style: ResqType.body().copyWith(color: Resq.inkSoft)),
                 const SizedBox(height: 32),
                 GlassTextField(
                   label: 'Phone Number',
@@ -83,7 +83,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   validator: (v) => Validators.validateRequired(v, 'Password'),
                   suffixIcon: IconButton(
                     icon: Icon(_obscure ? Icons.visibility_off : Icons.visibility,
-                        color: AppColors.textSecondary),
+                        color: Resq.inkSoft),
                     onPressed: () => setState(() => _obscure = !_obscure),
                   ),
                 ),
@@ -94,7 +94,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   onPressed: () => context.go(
                       _role == 'driver' ? Routes.driverRegister : Routes.patientRegister),
                   child: Text("Don't have an account? Register",
-                      style: AppTextStyles.caption.copyWith(color: AppColors.infoBlue)),
+                      style: ResqType.caption().copyWith(color: Resq.info)),
                 ),
               ],
             ),

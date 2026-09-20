@@ -62,12 +62,20 @@ class SOSRepository {
     }
   }
 
-  // POST /api/cases/respond → true on success
-  Future<bool> respondToDispatch(String caseId, String response) async {
+  /// POST /api/cases/respond → true on success.
+  ///
+  /// A decline may carry a reason, but never has to: the clock is running on
+  /// the next ambulance, so a driver who taps Decline and nothing else is
+  /// answered just as fast.
+  Future<bool> respondToDispatch(String caseId, String response, {String? reason}) async {
     try {
       final res = await apiClient.post(
         '/api/cases/respond',
-        data: {'caseId': caseId, 'response': response},
+        data: {
+          'caseId': caseId,
+          'response': response,
+          if (reason != null && reason.isNotEmpty) 'reason': reason,
+        },
       );
       return res['success'] == true;
     } catch (e) {

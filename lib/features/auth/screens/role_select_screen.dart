@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../core/constants/app_colors.dart';
-import '../../../core/constants/app_text_styles.dart';
+import '../../../core/constants/app_assets.dart';
+import '../../../core/theme/tokens.dart';
+import '../../../core/theme/typography.dart';
 import '../../../core/router/app_router.dart';
 
 class RoleSelectScreen extends StatelessWidget {
@@ -11,35 +12,65 @@ class RoleSelectScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: Resq.canvas,
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const SizedBox(height: 24),
-              Text('ResQPK', style: AppTextStyles.display.copyWith(color: AppColors.sosRed)),
-              const SizedBox(height: 8),
-              Text('How are you using ResQPK?',
-                  style: AppTextStyles.subtitle.copyWith(color: AppColors.textSecondary)),
-              const SizedBox(height: 32),
+              const SizedBox(height: Resq.space4),
+              Image.asset(
+                AppAssets.logoWordmark,
+                height: 36,
+                alignment: Alignment.centerLeft,
+                errorBuilder: (_, __, ___) =>
+                    Text('ResQPK', style: ResqType.display(color: Resq.brandInk)),
+              ),
+              const SizedBox(height: Resq.space3),
+              Text('Signing in is for crews', style: ResqType.title()),
+              const SizedBox(height: Resq.space2),
+              Text(
+                'Drivers and hospital staff sign in because they are accountable '
+                'for what they do in the system. Anyone who needs an ambulance '
+                'does not.',
+                style: ResqType.body(color: Resq.inkSoft),
+              ),
+              const SizedBox(height: Resq.space6),
               _RoleCard(
-                icon: Icons.local_hospital,
-                title: 'I need emergency help',
-                subtitle: 'Register or log in as a patient',
-                accent: AppColors.sosRed,
+                icon: Icons.airport_shuttle_rounded,
+                title: 'I drive an ambulance',
+                subtitle: 'Register or sign in as a driver',
+                accent: Resq.ready,
+                onTap: () => context.go(Routes.driverRegister),
+                onLogin: () => context.go('${Routes.login}?role=driver'),
+              ),
+              const SizedBox(height: Resq.space3),
+              // An account is optional for patients, and only ever about
+              // history and medical details — never about calling for help.
+              _RoleCard(
+                icon: Icons.person_rounded,
+                title: 'I have a patient account',
+                subtitle: 'For your medical details and past requests',
+                accent: Resq.info,
                 onTap: () => context.go(Routes.patientRegister),
                 onLogin: () => context.go('${Routes.login}?role=patient'),
               ),
-              const SizedBox(height: 12),
-              _RoleCard(
-                icon: Icons.airport_shuttle,
-                title: 'I drive an ambulance',
-                subtitle: 'Register or log in as a driver',
-                accent: AppColors.confirmedGreen,
-                onTap: () => context.go(Routes.driverRegister),
-                onLogin: () => context.go('${Routes.login}?role=driver'),
+              const SizedBox(height: Resq.space4),
+              OutlinedButton.icon(
+                onPressed: () => context.go(Routes.home),
+                icon: const Icon(Icons.emergency_rounded, size: 18, color: Resq.critical),
+                label: Text(
+                  'I just need an ambulance',
+                  style: ResqType.button(color: Resq.critical),
+                ),
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size.fromHeight(Resq.tapTarget),
+                  side: BorderSide(color: Resq.critical.withValues(alpha: 0.5)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(Resq.radiusControl),
+                  ),
+                ),
               ),
               const Spacer(),
               GestureDetector(
@@ -51,19 +82,19 @@ class RoleSelectScreen extends StatelessWidget {
                 child: Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    border: Border.all(color: AppColors.borderGlass),
+                    border: Border.all(color: Resq.border),
                     borderRadius: BorderRadius.circular(16),
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.business, color: AppColors.textSecondary, size: 20),
+                      const Icon(Icons.business, color: Resq.inkSoft, size: 20),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('Hospital Dashboard', style: AppTextStyles.subtitle),
-                            Text('Log in via web browser', style: AppTextStyles.caption),
+                            Text('Hospital Dashboard', style: ResqType.section()),
+                            Text('Log in via web browser', style: ResqType.caption()),
                           ],
                         ),
                       ),
@@ -120,8 +151,8 @@ class _RoleCardState extends State<_RoleCard> {
             child: Container(
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
-                color: AppColors.surfaceTwo,
-                border: Border.all(color: AppColors.borderGlass),
+                color: Resq.surfaceAlt,
+                border: Border.all(color: Resq.border),
                 borderRadius: BorderRadius.circular(16),
               ),
               child: Row(
@@ -140,13 +171,13 @@ class _RoleCardState extends State<_RoleCard> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(widget.title, style: AppTextStyles.subtitle),
+                        Text(widget.title, style: ResqType.section()),
                         const SizedBox(height: 4),
-                        Text(widget.subtitle, style: AppTextStyles.caption),
+                        Text(widget.subtitle, style: ResqType.caption()),
                       ],
                     ),
                   ),
-                  const Icon(Icons.chevron_right, color: AppColors.textSecondary),
+                  const Icon(Icons.chevron_right, color: Resq.inkSoft),
                 ],
               ),
             ),
@@ -155,7 +186,7 @@ class _RoleCardState extends State<_RoleCard> {
         TextButton(
           onPressed: widget.onLogin,
           child: Text('Already have an account? Login',
-              style: AppTextStyles.caption.copyWith(color: AppColors.infoBlue)),
+              style: ResqType.caption().copyWith(color: Resq.info)),
         ),
       ],
     );

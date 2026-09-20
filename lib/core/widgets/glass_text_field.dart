@@ -1,18 +1,14 @@
 import 'package:flutter/material.dart';
-import '../constants/app_colors.dart';
-import '../constants/app_text_styles.dart';
 
-/// Shared dark-glassmorphism form field used across the auth screens.
+import '../theme/tokens.dart';
+import '../theme/typography.dart';
+
+/// The form field used across sign-in and registration.
+///
+/// Was a dark glass panel, from when the whole app was dark. Now a warm filled
+/// field on the cream canvas — same name and API, so the auth screens did not
+/// have to be rewritten to follow the palette.
 class GlassTextField extends StatelessWidget {
-  final String label;
-  final TextEditingController? controller;
-  final String? Function(String?)? validator;
-  final TextInputType? keyboardType;
-  final bool obscureText;
-  final Widget? suffixIcon;
-  final String? hint;
-  final int maxLines;
-
   const GlassTextField({
     super.key,
     required this.label,
@@ -25,8 +21,17 @@ class GlassTextField extends StatelessWidget {
     this.maxLines = 1,
   });
 
+  final String label;
+  final TextEditingController? controller;
+  final String? Function(String?)? validator;
+  final TextInputType? keyboardType;
+  final bool obscureText;
+  final Widget? suffixIcon;
+  final String? hint;
+  final int maxLines;
+
   OutlineInputBorder _border(Color color, [double width = 1]) => OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(Resq.radiusControl),
         borderSide: BorderSide(color: color, width: width),
       );
 
@@ -38,21 +43,29 @@ class GlassTextField extends StatelessWidget {
       keyboardType: keyboardType,
       obscureText: obscureText,
       maxLines: obscureText ? 1 : maxLines,
-      style: AppTextStyles.body,
+      style: ResqType.body(),
+      cursorColor: Resq.brandInk,
       decoration: InputDecoration(
         labelText: label,
         hintText: hint,
-        hintStyle: AppTextStyles.caption,
-        labelStyle: AppTextStyles.caption.copyWith(color: AppColors.textSecondary),
+        hintStyle: ResqType.body(color: Resq.inkFaint),
+        labelStyle: ResqType.caption(color: Resq.inkSoft),
+        floatingLabelStyle: ResqType.caption(color: Resq.brandInk),
         filled: true,
-        fillColor: AppColors.surfaceTwo,
+        fillColor: Resq.surface,
         suffixIcon: suffixIcon,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        border: _border(AppColors.borderGlass),
-        enabledBorder: _border(AppColors.borderGlass),
-        focusedBorder: _border(AppColors.infoBlue, 1.5),
-        errorBorder: _border(AppColors.sosRed),
-        focusedErrorBorder: _border(AppColors.sosRed, 1.5),
+        // Generous vertical padding: these are tapped with a thumb, often by
+        // someone standing outside a vehicle.
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: Resq.space4,
+          vertical: Resq.space4,
+        ),
+        border: _border(Resq.border),
+        enabledBorder: _border(Resq.border),
+        focusedBorder: _border(Resq.brandInk, 1.5),
+        errorBorder: _border(Resq.critical),
+        focusedErrorBorder: _border(Resq.critical, 1.5),
+        errorStyle: ResqType.caption(color: Resq.critical),
       ),
     );
   }

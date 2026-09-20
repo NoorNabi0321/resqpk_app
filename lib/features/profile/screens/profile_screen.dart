@@ -5,8 +5,8 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../../../core/constants/app_colors.dart';
-import '../../../core/constants/app_text_styles.dart';
+import '../../../core/theme/tokens.dart';
+import '../../../core/theme/typography.dart';
 import '../../../core/network/fcm_service.dart';
 import '../../../core/router/app_router.dart';
 import '../../auth/providers/auth_provider.dart';
@@ -56,10 +56,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     showDialog<void>(
       context: context,
       builder: (d) => AlertDialog(
-        backgroundColor: AppColors.surfaceTwo,
-        title: Text('Log out?', style: AppTextStyles.subtitle),
+        backgroundColor: Resq.surfaceAlt,
+        title: Text('Log out?', style: ResqType.section()),
         content: Text('You will need to sign in again to use ResQPK.',
-            style: AppTextStyles.body.copyWith(color: AppColors.textSecondary)),
+            style: ResqType.body().copyWith(color: Resq.inkSoft)),
         actions: [
           TextButton(onPressed: () => Navigator.pop(d), child: const Text('Cancel')),
           TextButton(
@@ -68,7 +68,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               await ref.read(authProvider.notifier).logout();
               if (mounted) context.go(Routes.roleSelect);
             },
-            child: Text('Log out', style: AppTextStyles.body.copyWith(color: AppColors.sosRed)),
+            child: Text('Log out', style: ResqType.body().copyWith(color: Resq.critical)),
           ),
         ],
       ),
@@ -91,7 +91,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         .toUpperCase();
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: Resq.canvas,
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.all(20),
@@ -100,7 +100,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             Row(
               children: [
                 IconButton(
-                  icon: const Icon(Icons.arrow_back, color: AppColors.textPrimary),
+                  icon: const Icon(Icons.arrow_back, color: Resq.ink),
                   onPressed: () => context.pop(),
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
@@ -113,13 +113,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 children: [
                   CircleAvatar(
                     radius: 40,
-                    backgroundColor: AppColors.sosRed,
+                    backgroundColor: Resq.critical,
                     child: Text(initials.isEmpty ? 'U' : initials,
-                        style: AppTextStyles.title.copyWith(color: Colors.white)),
+                        style: ResqType.title().copyWith(color: Colors.white)),
                   ),
                   const SizedBox(height: 10),
-                  Text(user?.fullName ?? 'Patient', style: AppTextStyles.title),
-                  Text(user?.phone ?? '', style: AppTextStyles.caption),
+                  Text(user?.fullName ?? 'Patient', style: ResqType.title()),
+                  Text(user?.phone ?? '', style: ResqType.caption()),
                 ],
               ),
             ),
@@ -138,26 +138,26 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         height: 48,
                         alignment: Alignment.center,
                         decoration: BoxDecoration(
-                          color: AppColors.sosRed.withValues(alpha: 0.12),
+                          color: Resq.critical.withValues(alpha: 0.12),
                           shape: BoxShape.circle,
                         ),
                         child: Text(mp?.bloodGroup ?? '?',
-                            style: AppTextStyles.body
-                                .copyWith(color: AppColors.sosRed, fontWeight: FontWeight.bold)),
+                            style: ResqType.body()
+                                .copyWith(color: Resq.critical, fontWeight: FontWeight.bold)),
                       ),
                       const SizedBox(width: 12),
                       Text(mp?.bloodGroup != null ? 'Blood Group' : 'Blood group not set',
-                          style: AppTextStyles.body.copyWith(
+                          style: ResqType.body().copyWith(
                               color: mp?.bloodGroup != null
-                                  ? AppColors.textPrimary
-                                  : AppColors.warningAmber)),
+                                  ? Resq.ink
+                                  : Resq.decision)),
                     ],
                   ),
                   const SizedBox(height: 12),
-                  _chips('Conditions', mp?.chronicConditions ?? const [], AppColors.warningAmber,
+                  _chips('Conditions', mp?.chronicConditions ?? const [], Resq.decision,
                       'No conditions recorded'),
                   const SizedBox(height: 8),
-                  _chips('Allergies', mp?.allergies ?? const [], AppColors.sosRed,
+                  _chips('Allergies', mp?.allergies ?? const [], Resq.critical,
                       'No allergies recorded'),
                   if ((mp?.emergencyContactName ?? '').isNotEmpty) ...[
                     const SizedBox(height: 12),
@@ -165,16 +165,16 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       onTap: () => _dial(mp.emergencyContactPhone),
                       child: Row(
                         children: [
-                          const Icon(Icons.contact_phone, size: 18, color: AppColors.confirmedGreen),
+                          const Icon(Icons.contact_phone, size: 18, color: Resq.ready),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
                               'Emergency: ${mp!.emergencyContactName}'
                               '${mp.emergencyContactRelation != null ? ' (${mp.emergencyContactRelation})' : ''}',
-                              style: AppTextStyles.caption,
+                              style: ResqType.caption(),
                             ),
                           ),
-                          const Icon(Icons.call, size: 16, color: AppColors.textSecondary),
+                          const Icon(Icons.call, size: 16, color: Resq.inkSoft),
                         ],
                       ),
                     ),
@@ -225,7 +225,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     'Notifications',
                     Switch(
                       value: _notifications,
-                      activeThumbColor: AppColors.sosRed,
+                      activeThumbColor: Resq.critical,
                       onChanged: _setNotifications,
                     ),
                   ),
@@ -240,7 +240,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     ),
                   ),
                   _settingRow(Icons.my_location, 'Location Updates',
-                      Text('Every 5 min', style: AppTextStyles.caption)),
+                      Text('Every 5 min', style: ResqType.caption())),
                 ],
               ),
             ),
@@ -248,17 +248,17 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
             Text('ResQPK 1.0.0  •  FYP Project  •  SZABIST Hyderabad',
                 textAlign: TextAlign.center,
-                style: AppTextStyles.caption.copyWith(color: AppColors.textSecondary)),
+                style: ResqType.caption().copyWith(color: Resq.inkSoft)),
             const SizedBox(height: 16),
 
             OutlinedButton(
               onPressed: _confirmLogout,
               style: OutlinedButton.styleFrom(
-                side: const BorderSide(color: AppColors.sosRed),
+                side: const BorderSide(color: Resq.critical),
                 minimumSize: const Size.fromHeight(48),
               ),
               child: Text('Log Out',
-                  style: AppTextStyles.buttonLabel.copyWith(color: AppColors.sosRed)),
+                  style: ResqType.button().copyWith(color: Resq.critical)),
             ),
             const SizedBox(height: 16),
           ],
@@ -270,13 +270,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   Widget _card({required String title, required Widget child}) => Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: AppColors.surfaceOne,
+          color: Resq.surface,
           borderRadius: BorderRadius.circular(18),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(title, style: AppTextStyles.body.copyWith(fontWeight: FontWeight.bold)),
+            Text(title, style: ResqType.body().copyWith(fontWeight: FontWeight.bold)),
             const SizedBox(height: 12),
             child,
           ],
@@ -285,7 +285,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
   Widget _chips(String label, List<String> items, Color color, String empty) {
     if (items.isEmpty) {
-      return Text(empty, style: AppTextStyles.caption.copyWith(color: AppColors.textSecondary));
+      return Text(empty, style: ResqType.caption().copyWith(color: Resq.inkSoft));
     }
     return Wrap(
       spacing: 6,
@@ -297,7 +297,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   color: color.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(20),
                 ),
-                child: Text(c, style: AppTextStyles.caption.copyWith(color: color)),
+                child: Text(c, style: ResqType.caption().copyWith(color: color)),
               ))
           .toList(),
     );
@@ -308,16 +308,16 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           margin: const EdgeInsets.symmetric(horizontal: 4),
           padding: const EdgeInsets.symmetric(vertical: 14),
           decoration: BoxDecoration(
-            color: AppColors.surfaceOne,
+            color: Resq.surface,
             borderRadius: BorderRadius.circular(14),
           ),
           child: Column(
             children: [
-              Text(value, style: AppTextStyles.title.copyWith(fontSize: 18, color: Colors.white)),
+              Text(value, style: ResqType.title().copyWith(fontSize: 18, color: Colors.white)),
               const SizedBox(height: 2),
               Text(label,
                   textAlign: TextAlign.center,
-                  style: AppTextStyles.caption.copyWith(fontSize: 10)),
+                  style: ResqType.caption().copyWith(fontSize: 10)),
             ],
           ),
         ),
@@ -327,9 +327,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         padding: const EdgeInsets.symmetric(vertical: 6),
         child: Row(
           children: [
-            Icon(icon, size: 20, color: AppColors.textSecondary),
+            Icon(icon, size: 20, color: Resq.inkSoft),
             const SizedBox(width: 12),
-            Expanded(child: Text(label, style: AppTextStyles.body)),
+            Expanded(child: Text(label, style: ResqType.body())),
             trailing,
           ],
         ),
@@ -340,12 +340,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
           decoration: BoxDecoration(
-            color: active ? AppColors.infoBlue : AppColors.surfaceTwo,
+            color: active ? Resq.info : Resq.surfaceAlt,
             borderRadius: BorderRadius.circular(16),
           ),
           child: Text(label,
-              style: AppTextStyles.caption
-                  .copyWith(color: active ? Colors.white : AppColors.textSecondary)),
+              style: ResqType.caption()
+                  .copyWith(color: active ? Colors.white : Resq.inkSoft)),
         ),
       );
 }

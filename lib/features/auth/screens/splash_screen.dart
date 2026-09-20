@@ -4,8 +4,9 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../../../core/constants/app_colors.dart';
-import '../../../core/constants/app_text_styles.dart';
+import '../../../core/constants/app_assets.dart';
+import '../../../core/theme/tokens.dart';
+import '../../../core/theme/typography.dart';
 import '../../../core/router/app_router.dart';
 import '../../sos/data/sos_repository.dart';
 import '../../sos/providers/sos_provider.dart';
@@ -84,19 +85,23 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: Resq.canvas,
       body: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
-              'ResQPK',
-              style: AppTextStyles.display.copyWith(color: AppColors.sosRed, fontSize: 44),
+            Image.asset(
+              AppAssets.splashLogo,
+              height: 132,
+              errorBuilder: (_, __, ___) => Text(
+                'ResQPK',
+                style: ResqType.display(color: Resq.brandInk).copyWith(fontSize: 44),
+              ),
             ).animate().fadeIn(duration: 600.ms).scale(begin: const Offset(0.8, 0.8)),
-            const SizedBox(height: 12),
+            const SizedBox(height: Resq.space4),
             Text(
-              'Emergency Response, Reimagined',
-              style: AppTextStyles.subtitle.copyWith(color: AppColors.textSecondary),
+              'Emergency help for Hyderabad',
+              style: ResqType.section(color: Resq.inkSoft),
             ).animate().fadeIn(delay: 400.ms, duration: 600.ms),
           ],
         ),

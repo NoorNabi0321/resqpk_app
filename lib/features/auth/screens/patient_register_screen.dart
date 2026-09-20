@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../core/constants/app_colors.dart';
-import '../../../core/constants/app_text_styles.dart';
+import '../../../core/theme/tokens.dart';
+import '../../../core/theme/typography.dart';
 import '../../../core/router/app_router.dart';
 import '../../../core/utils/validators.dart';
 import '../../../core/widgets/glass_text_field.dart';
@@ -58,10 +58,11 @@ class _PatientRegisterScreenState extends ConsumerState<PatientRegisterScreen> {
   Widget build(BuildContext context) {
     final loading = ref.watch(authProvider).isLoading;
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: Resq.canvas,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
-        title: Text('Create Account', style: AppTextStyles.title),
+        foregroundColor: Resq.ink,
+        title: Text('Create Account', style: ResqType.title()),
       ),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -99,7 +100,7 @@ class _PatientRegisterScreenState extends ConsumerState<PatientRegisterScreen> {
                   validator: Validators.validatePassword,
                   suffixIcon: IconButton(
                     icon: Icon(_obscure ? Icons.visibility_off : Icons.visibility,
-                        color: AppColors.textSecondary),
+                        color: Resq.inkSoft),
                     onPressed: () => setState(() => _obscure = !_obscure),
                   ),
                 ),
@@ -111,14 +112,14 @@ class _PatientRegisterScreenState extends ConsumerState<PatientRegisterScreen> {
                   validator: (v) => v != _password.text ? 'Passwords do not match' : null,
                   suffixIcon: IconButton(
                     icon: Icon(_obscure2 ? Icons.visibility_off : Icons.visibility,
-                        color: AppColors.textSecondary),
+                        color: Resq.inkSoft),
                     onPressed: () => setState(() => _obscure2 = !_obscure2),
                   ),
                 ),
                 const SizedBox(height: 24),
                 Text(
                   'By creating an account, you agree to our Terms of Service',
-                  style: AppTextStyles.caption,
+                  style: ResqType.caption(),
                 ),
                 const SizedBox(height: 16),
                 PrimaryButton(label: 'Create Account', loading: loading, onPressed: _submit),

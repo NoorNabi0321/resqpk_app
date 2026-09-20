@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../core/constants/app_colors.dart';
-import '../../../core/constants/app_text_styles.dart';
+import '../../../core/theme/tokens.dart';
+import '../../../core/theme/typography.dart';
 import '../../../core/router/app_router.dart';
 import '../../../core/utils/validators.dart';
 import '../../../core/widgets/glass_text_field.dart';
@@ -68,10 +68,11 @@ class _DriverRegisterScreenState extends ConsumerState<DriverRegisterScreen> {
   Widget build(BuildContext context) {
     final loading = ref.watch(authProvider).isLoading;
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: Resq.canvas,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
-        title: Text('Driver Sign Up', style: AppTextStyles.title),
+        foregroundColor: Resq.ink,
+        title: Text('Driver Sign Up', style: ResqType.title()),
       ),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -102,7 +103,7 @@ class _DriverRegisterScreenState extends ConsumerState<DriverRegisterScreen> {
                   validator: Validators.validatePassword,
                   suffixIcon: IconButton(
                     icon: Icon(_obscure ? Icons.visibility_off : Icons.visibility,
-                        color: AppColors.textSecondary),
+                        color: Resq.inkSoft),
                     onPressed: () => setState(() => _obscure = !_obscure),
                   ),
                 ),
@@ -121,17 +122,17 @@ class _DriverRegisterScreenState extends ConsumerState<DriverRegisterScreen> {
                 const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
                   initialValue: _organization,
-                  dropdownColor: AppColors.surfaceTwo,
-                  style: AppTextStyles.body,
+                  dropdownColor: Resq.surfaceAlt,
+                  style: ResqType.body(),
                   decoration: InputDecoration(
                     labelText: 'Organization',
-                    labelStyle: AppTextStyles.caption.copyWith(color: AppColors.textSecondary),
+                    labelStyle: ResqType.caption().copyWith(color: Resq.inkSoft),
                     filled: true,
-                    fillColor: AppColors.surfaceTwo,
+                    fillColor: Resq.surfaceAlt,
                     contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: AppColors.borderGlass),
+                      borderSide: const BorderSide(color: Resq.border),
                     ),
                   ),
                   items: _organizations

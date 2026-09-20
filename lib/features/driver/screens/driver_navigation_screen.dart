@@ -9,8 +9,9 @@ import 'package:go_router/go_router.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../../../core/constants/app_colors.dart';
-import '../../../core/constants/app_text_styles.dart';
+import '../../../core/theme/app_theme.dart';
+import '../../../core/theme/tokens.dart';
+import '../../../core/theme/typography.dart';
 import '../../../core/map/resqpk_map.dart';
 import '../../../core/location/location_provider.dart';
 import '../../../core/realtime/realtime_provider.dart';
@@ -19,7 +20,9 @@ import '../../../core/widgets/back_guard.dart';
 import '../../sos/data/models/emergency_case_model.dart';
 import '../../sos/data/models/quick_message_model.dart';
 import '../../sos/data/sos_repository.dart';
+import '../providers/driver_history_provider.dart';
 import '../providers/driver_realtime_provider.dart';
+import '../widgets/driver_chrome.dart';
 
 class DriverNavigationScreen extends ConsumerStatefulWidget {
   final String caseId;
@@ -126,12 +129,12 @@ class _DriverNavigationScreenState extends ConsumerState<DriverNavigationScreen>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             duration: const Duration(seconds: 4),
-            backgroundColor: AppColors.surfaceTwo,
+            backgroundColor: ResqDark.surfaceRaised,
             content: Row(
               children: [
-                const Icon(Icons.local_hospital, color: AppColors.confirmedGreen, size: 18),
+                const Icon(Icons.local_hospital, color: Resq.ready, size: 18),
                 const SizedBox(width: 10),
-                Expanded(child: Text(message.messageText, style: AppTextStyles.body)),
+                Expanded(child: Text(message.messageText, style: ResqType.body(color: ResqDark.ink))),
               ],
             ),
           ),
@@ -202,7 +205,7 @@ class _DriverNavigationScreenState extends ConsumerState<DriverNavigationScreen>
     _refreshMessageLog();
     showModalBottomSheet<void>(
       context: context,
-      backgroundColor: AppColors.surfaceOne,
+      backgroundColor: ResqDark.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -213,13 +216,13 @@ class _DriverNavigationScreenState extends ConsumerState<DriverNavigationScreen>
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text('Messages', style: AppTextStyles.subtitle),
+              Text('Messages', style: ResqType.section(color: ResqDark.ink)),
               const SizedBox(height: 12),
               if (_messageLog.isEmpty)
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 24),
                   child: Text('No messages yet.',
-                      textAlign: TextAlign.center, style: AppTextStyles.caption),
+                      textAlign: TextAlign.center, style: ResqType.caption(color: ResqDark.inkMuted)),
                 )
               else
                 ConstrainedBox(
@@ -237,18 +240,18 @@ class _DriverNavigationScreenState extends ConsumerState<DriverNavigationScreen>
                           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                           decoration: BoxDecoration(
                             color: m.isFromHospital
-                                ? AppColors.surfaceTwo
-                                : AppColors.infoBlue.withValues(alpha: 0.18),
+                                ? ResqDark.surfaceRaised
+                                : Resq.info.withValues(alpha: 0.18),
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(m.messageText, style: AppTextStyles.body),
+                              Text(m.messageText, style: ResqType.body(color: ResqDark.ink)),
                               if (m.createdAt != null)
                                 Text(
                                   TimeOfDay.fromDateTime(m.createdAt!.toLocal()).format(context),
-                                  style: AppTextStyles.caption,
+                                  style: ResqType.caption(color: ResqDark.inkMuted),
                                 ),
                             ],
                           ),
@@ -276,7 +279,7 @@ class _DriverNavigationScreenState extends ConsumerState<DriverNavigationScreen>
 
     final confirmed = await showModalBottomSheet<bool>(
       context: context,
-      backgroundColor: AppColors.surfaceOne,
+      backgroundColor: ResqDark.surface,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
@@ -289,15 +292,15 @@ class _DriverNavigationScreenState extends ConsumerState<DriverNavigationScreen>
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text('Hand over this case', style: AppTextStyles.subtitle),
+                Text('Hand over this case', style: ResqType.section(color: ResqDark.ink)),
                 const SizedBox(height: 6),
                 Text(
                   'The nearest available ambulance will take over. The patient '
                   'and hospital are told immediately.',
-                  style: AppTextStyles.caption,
+                  style: ResqType.caption(color: ResqDark.inkMuted),
                 ),
                 const SizedBox(height: 16),
-                Text('Reason', style: AppTextStyles.caption),
+                Text('Reason', style: ResqType.caption(color: ResqDark.inkMuted)),
                 const SizedBox(height: 8),
                 Wrap(
                   spacing: 8,
@@ -311,21 +314,21 @@ class _DriverNavigationScreenState extends ConsumerState<DriverNavigationScreen>
                                 const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                             decoration: BoxDecoration(
                               color: chosen == r
-                                  ? AppColors.warningAmber.withValues(alpha: 0.2)
-                                  : AppColors.surfaceTwo,
+                                  ? Resq.decision.withValues(alpha: 0.2)
+                                  : ResqDark.surfaceRaised,
                               borderRadius: BorderRadius.circular(999),
                               border: Border.all(
                                 color: chosen == r
-                                    ? AppColors.warningAmber
-                                    : AppColors.borderGlass,
+                                    ? Resq.decision
+                                    : ResqDark.border,
                               ),
                             ),
                             child: Text(
                               r,
-                              style: AppTextStyles.caption.copyWith(
+                              style: ResqType.caption(color: ResqDark.inkMuted).copyWith(
                                 color: chosen == r
-                                    ? AppColors.warningAmber
-                                    : AppColors.textSecondary,
+                                    ? Resq.decision
+                                    : ResqDark.inkMuted,
                               ),
                             ),
                           ),
@@ -341,19 +344,19 @@ class _DriverNavigationScreenState extends ConsumerState<DriverNavigationScreen>
                         ? null
                         : () => Navigator.of(sheetCtx).pop(true),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.warningAmber,
-                      disabledBackgroundColor: AppColors.surfaceThree,
+                      backgroundColor: Resq.decision,
+                      disabledBackgroundColor: ResqDark.surfaceHigh,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(26),
                       ),
                     ),
                     child: Text('Find another ambulance',
-                        style: AppTextStyles.buttonLabel),
+                        style: ResqType.button()),
                   ),
                 ),
                 TextButton(
                   onPressed: () => Navigator.of(sheetCtx).pop(false),
-                  child: Text('Keep this case', style: AppTextStyles.caption),
+                  child: Text('Keep this case', style: ResqType.caption(color: ResqDark.inkMuted)),
                 ),
               ],
             ),
@@ -401,7 +404,7 @@ class _DriverNavigationScreenState extends ConsumerState<DriverNavigationScreen>
       context: context,
       barrierDismissible: false,
       builder: (dialogCtx) => Dialog.fullscreen(
-        backgroundColor: AppColors.warningAmber,
+        backgroundColor: Resq.decision,
         child: SafeArea(
           child: Padding(
             padding: const EdgeInsets.all(28),
@@ -414,20 +417,20 @@ class _DriverNavigationScreenState extends ConsumerState<DriverNavigationScreen>
                 Text(
                   'REDIRECT',
                   textAlign: TextAlign.center,
-                  style: AppTextStyles.display.copyWith(color: Colors.white, fontSize: 34),
+                  style: ResqType.display(color: ResqDark.ink).copyWith(color: Colors.white, fontSize: 34),
                 ),
                 const SizedBox(height: 16),
                 Text(
                   'Go to $name instead',
                   textAlign: TextAlign.center,
-                  style: AppTextStyles.title.copyWith(color: Colors.white),
+                  style: ResqType.title(color: ResqDark.ink).copyWith(color: Colors.white),
                 ),
                 if (reason.isNotEmpty) ...[
                   const SizedBox(height: 10),
                   Text(
                     'Reason: $reason',
                     textAlign: TextAlign.center,
-                    style: AppTextStyles.body.copyWith(color: Colors.white70),
+                    style: ResqType.body(color: ResqDark.ink).copyWith(color: Colors.white70),
                   ),
                 ],
                 if (etaText != null && etaText.isNotEmpty) ...[
@@ -435,7 +438,7 @@ class _DriverNavigationScreenState extends ConsumerState<DriverNavigationScreen>
                   Text(
                     'New ETA: $etaText',
                     textAlign: TextAlign.center,
-                    style: AppTextStyles.body.copyWith(color: Colors.white70),
+                    style: ResqType.body(color: ResqDark.ink).copyWith(color: Colors.white70),
                   ),
                 ],
                 const SizedBox(height: 36),
@@ -448,12 +451,12 @@ class _DriverNavigationScreenState extends ConsumerState<DriverNavigationScreen>
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.white,
-                      foregroundColor: AppColors.warningAmber,
+                      foregroundColor: Resq.decision,
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
                     ),
                     child: Text(
                       'Confirm — Rerouting',
-                      style: AppTextStyles.buttonLabel.copyWith(color: AppColors.warningAmber),
+                      style: ResqType.button().copyWith(color: Resq.decision),
                     ),
                   ),
                 ),
@@ -567,6 +570,8 @@ class _DriverNavigationScreenState extends ConsumerState<DriverNavigationScreen>
 
   void _onCompleted() {
     ref.read(driverLocationBroadcasterProvider).updateActiveCaseId(null);
+    // The run just finished — the duty screen's "today" count is now wrong.
+    ref.invalidate(driverHistoryProvider);
     setState(() => _completed = true);
     Future.delayed(const Duration(seconds: 3), () {
       if (mounted) context.go(Routes.driverHome);
@@ -597,8 +602,8 @@ class _DriverNavigationScreenState extends ConsumerState<DriverNavigationScreen>
   Widget build(BuildContext context) {
     if (_loading) {
       return const Scaffold(
-        backgroundColor: AppColors.background,
-        body: Center(child: CircularProgressIndicator(color: AppColors.sosRed)),
+        backgroundColor: ResqDark.canvas,
+        body: Center(child: CircularProgressIndicator(color: Resq.critical)),
       );
     }
     if (_completed) {
@@ -621,11 +626,17 @@ class _DriverNavigationScreenState extends ConsumerState<DriverNavigationScreen>
     // reopened from there or on the next app launch.
     return BackTo(
       onBack: () => context.go(Routes.driverHome),
-      child: Scaffold(
-      backgroundColor: AppColors.background,
+      // Dark for the sheets and dialogs this screen opens as much as for the
+      // screen itself: a white sheet over a night map is a flash in the face of
+      // someone who is driving.
+      child: Theme(
+        data: ResqTheme.dark,
+        child: Scaffold(
+      backgroundColor: ResqDark.canvas,
       body: Stack(
         children: [
-          FlutterMap(
+          RepaintBoundary(
+            child: FlutterMap(
             mapController: _mapController,
             options: MapOptions(initialCenter: driver ?? target ?? const LatLng(25.3792, 68.3683), initialZoom: 14),
             children: [
@@ -634,11 +645,11 @@ class _DriverNavigationScreenState extends ConsumerState<DriverNavigationScreen>
                 if (_routePoints.length >= 2)
                   ...routePolyline(
                     _routePoints,
-                    color: goingToHospital ? AppColors.confirmedGreen : AppColors.infoBlue,
+                    color: goingToHospital ? Resq.ready : Resq.info,
                   )
                 else if (driver != null && target != null)
                   ...routePolyline([driver, target],
-                      color: AppColors.infoBlue, isAlternate: true),
+                      color: Resq.info, isAlternate: true),
               ]),
               MarkerLayer(markers: [
                 if (target != null)
@@ -648,7 +659,7 @@ class _DriverNavigationScreenState extends ConsumerState<DriverNavigationScreen>
                     height: MapSpec.pinHeight,
                     alignment: Alignment.topCenter,
                     child: MapDestinationPin(
-                      color: goingToHospital ? AppColors.confirmedGreen : AppColors.sosRed,
+                      color: goingToHospital ? Resq.ready : Resq.critical,
                       icon: goingToHospital ? Icons.local_hospital : Icons.person_pin_circle,
                     ),
                   ),
@@ -658,12 +669,13 @@ class _DriverNavigationScreenState extends ConsumerState<DriverNavigationScreen>
                     width: MapSpec.touchTarget,
                     height: MapSpec.touchTarget,
                     child: const NavigationPuck(
-                      color: AppColors.infoBlue,
+                      color: Resq.info,
                       icon: Icons.navigation,
                     ),
                   ),
               ]),
             ],
+          ),
           ),
           SafeArea(
             child: Column(
@@ -683,14 +695,14 @@ class _DriverNavigationScreenState extends ConsumerState<DriverNavigationScreen>
                         margin: const EdgeInsets.symmetric(vertical: 12),
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                         decoration: BoxDecoration(
-                          color: AppColors.surfaceTwo,
+                          color: ResqDark.surfaceRaised,
                           borderRadius: BorderRadius.circular(999),
-                          border: Border.all(color: AppColors.borderGlass),
+                          border: Border.all(color: ResqDark.border),
                         ),
                         child: Text(
                           '${c?.patientName ?? 'Patient'} · ${(c?.urgencyLevel ?? 'emergency').toUpperCase()}',
                           textAlign: TextAlign.center,
-                          style: AppTextStyles.caption,
+                          style: ResqType.caption(color: ResqDark.inkMuted),
                         ),
                       ),
                     ),
@@ -699,7 +711,7 @@ class _DriverNavigationScreenState extends ConsumerState<DriverNavigationScreen>
                     if (_status == 'driver_assigned' || _status == 'arrived')
                       _RoundIconButton(
                         icon: Icons.swap_horiz,
-                        tint: AppColors.warningAmber,
+                        tint: Resq.decision,
                         onTap: _busy ? null : _confirmHandoff,
                       ),
                     const SizedBox(width: 12),
@@ -730,6 +742,7 @@ class _DriverNavigationScreenState extends ConsumerState<DriverNavigationScreen>
             ),
           ),
         ],
+      ),
       ),
       ),
     );
@@ -763,19 +776,19 @@ class _HospitalDecisionBanner extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       decoration: BoxDecoration(
         color: accepted
-            ? AppColors.confirmedGreen.withValues(alpha: 0.92)
-            : AppColors.surfaceTwo.withValues(alpha: 0.92),
+            ? Resq.ready.withValues(alpha: 0.92)
+            : ResqDark.surfaceRaised.withValues(alpha: 0.92),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: accepted ? AppColors.confirmedGreen : AppColors.borderGlass,
+          color: accepted ? Resq.ready : ResqDark.border,
         ),
       ),
       width: double.infinity,
       child: Text(
         label,
         textAlign: TextAlign.center,
-        style: AppTextStyles.caption.copyWith(
-          color: accepted ? Colors.white : AppColors.textSecondary,
+        style: ResqType.caption(color: ResqDark.inkMuted).copyWith(
+          color: accepted ? Colors.white : ResqDark.inkMuted,
           fontWeight: accepted ? FontWeight.bold : FontWeight.normal,
         ),
       ),
@@ -799,13 +812,13 @@ class _RoundIconButton extends StatelessWidget {
         width: 44,
         height: 44,
         decoration: BoxDecoration(
-          color: AppColors.surfaceTwo,
+          color: ResqDark.surfaceRaised,
           shape: BoxShape.circle,
-          border: Border.all(color: tint ?? AppColors.borderGlass),
+          border: Border.all(color: tint ?? ResqDark.border),
         ),
         child: Icon(
           icon,
-          color: onTap == null ? AppColors.textSecondary : (tint ?? AppColors.textSecondary),
+          color: onTap == null ? ResqDark.inkMuted : (tint ?? ResqDark.inkMuted),
           size: 20,
         ),
       ),
@@ -828,14 +841,14 @@ class _MessageLogButton extends StatelessWidget {
         width: 44,
         height: 44,
         decoration: BoxDecoration(
-          color: AppColors.surfaceTwo,
+          color: ResqDark.surfaceRaised,
           shape: BoxShape.circle,
-          border: Border.all(color: AppColors.borderGlass),
+          border: Border.all(color: ResqDark.border),
         ),
         child: Stack(
           alignment: Alignment.center,
           children: [
-            const Icon(Icons.mail_outline, color: AppColors.textSecondary, size: 20),
+            const Icon(Icons.mail_outline, color: ResqDark.inkMuted, size: 20),
             if (unread > 0)
               Positioned(
                 top: 6,
@@ -843,12 +856,12 @@ class _MessageLogButton extends StatelessWidget {
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
                   decoration: BoxDecoration(
-                    color: AppColors.sosRed,
+                    color: Resq.critical,
                     borderRadius: BorderRadius.circular(999),
                   ),
                   child: Text(
                     unread > 9 ? '9+' : '$unread',
-                    style: AppTextStyles.caption.copyWith(
+                    style: ResqType.caption(color: ResqDark.inkMuted).copyWith(
                       color: Colors.white,
                       fontSize: 9,
                       fontWeight: FontWeight.bold,
@@ -900,15 +913,15 @@ class _ActionCard extends StatelessWidget {
           width: double.infinity,
           padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
           decoration: BoxDecoration(
-            color: AppColors.surfaceOne.withValues(alpha: 0.92),
+            color: ResqDark.surface.withValues(alpha: 0.92),
             borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-            border: Border.all(color: AppColors.borderGlass),
+            border: Border.all(color: ResqDark.border),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(instruction, style: AppTextStyles.subtitle),
+              Text(instruction, style: ResqType.section(color: ResqDark.ink)),
               const SizedBox(height: 12),
               if (quickMessages.isNotEmpty) ...[
                 SizedBox(
@@ -928,11 +941,11 @@ class _ActionCard extends StatelessWidget {
                           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                           decoration: BoxDecoration(
                             color: sent
-                                ? AppColors.confirmedGreen.withValues(alpha: 0.2)
-                                : AppColors.surfaceTwo,
+                                ? Resq.ready.withValues(alpha: 0.2)
+                                : ResqDark.surfaceRaised,
                             borderRadius: BorderRadius.circular(999),
                             border: Border.all(
-                              color: sent ? AppColors.confirmedGreen : AppColors.borderGlass,
+                              color: sent ? Resq.ready : ResqDark.border,
                             ),
                           ),
                           child: Row(
@@ -944,19 +957,19 @@ class _ActionCard extends StatelessWidget {
                                   height: 12,
                                   child: CircularProgressIndicator(
                                     strokeWidth: 2,
-                                    color: AppColors.textSecondary,
+                                    color: ResqDark.inkMuted,
                                   ),
                                 )
                               else if (sent)
                                 const Icon(Icons.check,
-                                    size: 13, color: AppColors.confirmedGreen),
+                                    size: 13, color: Resq.ready),
                               if (sending || sent) const SizedBox(width: 6),
                               Text(
                                 m.text,
-                                style: AppTextStyles.caption.copyWith(
+                                style: ResqType.caption(color: ResqDark.inkMuted).copyWith(
                                   color: sent
-                                      ? AppColors.confirmedGreen
-                                      : AppColors.textSecondary,
+                                      ? Resq.ready
+                                      : ResqDark.inkMuted,
                                 ),
                               ),
                             ],
@@ -971,34 +984,24 @@ class _ActionCard extends StatelessWidget {
               Row(
                 children: [
                   if (bloodGroup != null && bloodGroup!.isNotEmpty)
-                    _chip('🩸 $bloodGroup', AppColors.sosRed),
+                    _chip('🩸 $bloodGroup', Resq.critical),
                   if (conditions != null)
-                    ...conditions!.take(2).map((c) => _chip(c, AppColors.warningAmber)),
+                    ...conditions!.take(2).map((c) => _chip(c, Resq.decision)),
                   const Spacer(),
                   IconButton(
                     onPressed: onCallPatient,
-                    icon: const Icon(Icons.phone, color: AppColors.confirmedGreen),
+                    icon: const Icon(Icons.phone, color: Resq.ready),
                   ),
                 ],
               ),
               const SizedBox(height: 12),
-              SizedBox(
-                height: 56,
-                child: ElevatedButton(
-                  onPressed: (busy || onAction == null) ? null : onAction,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.confirmedGreen,
-                    disabledBackgroundColor: AppColors.surfaceThree,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-                  ),
-                  child: busy
-                      ? const SizedBox(
-                          width: 24,
-                          height: 24,
-                          child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white),
-                        )
-                      : Text(actionLabel ?? 'Trip complete', style: AppTextStyles.buttonLabel),
-                ),
+              // The only button on this screen a moving driver should ever have
+              // to find: full width, 56dp, and it says what happens next.
+              DriverButton(
+                label: actionLabel ?? 'Trip complete',
+                icon: Icons.arrow_forward_rounded,
+                busy: busy,
+                onPressed: onAction,
               ),
             ],
           ),
@@ -1014,7 +1017,7 @@ class _ActionCard extends StatelessWidget {
           color: color.withValues(alpha: 0.15),
           borderRadius: BorderRadius.circular(10),
         ),
-        child: Text(label, style: AppTextStyles.caption.copyWith(color: color)),
+        child: Text(label, style: ResqType.caption(color: ResqDark.inkMuted).copyWith(color: color)),
       );
 }
 
@@ -1024,17 +1027,17 @@ class _CompletedView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: ResqDark.canvas,
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.check_circle, color: AppColors.confirmedGreen, size: 80),
+            const Icon(Icons.check_circle, color: Resq.ready, size: 80),
             const SizedBox(height: 16),
-            Text('Trip completed', style: AppTextStyles.title),
+            Text('Trip completed', style: ResqType.title(color: ResqDark.ink)),
             const SizedBox(height: 8),
             Text('Thank you! Returning to home...',
-                style: AppTextStyles.body.copyWith(color: AppColors.textSecondary)),
+                style: ResqType.body(color: ResqDark.ink).copyWith(color: ResqDark.inkMuted)),
           ],
         ),
       ),

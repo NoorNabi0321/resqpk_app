@@ -2,16 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../../../core/constants/app_colors.dart';
-import '../../../core/constants/app_text_styles.dart';
+import '../../../core/constants/app_assets.dart';
+import '../../../core/theme/tokens.dart';
+import '../../../core/theme/typography.dart';
 import '../../../core/router/app_router.dart';
 import '../../../core/widgets/primary_button.dart';
 
 class _OnboardingPage {
+  const _OnboardingPage(this.headline, this.body, this.illustration, this.tint);
+
   final String headline;
   final String body;
-  final List<Color> gradient;
-  const _OnboardingPage(this.headline, this.body, this.gradient);
+  final String illustration;
+  final Color tint;
 }
 
 class OnboardingScreen extends StatefulWidget {
@@ -25,13 +28,31 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   final PageController _controller = PageController();
   int _index = 0;
 
+  // Three promises, in the order they matter: help comes, the hospital is
+  // ready, and you choose which one. No account is mentioned, because none is
+  // needed to do any of it.
   static const List<_OnboardingPage> _pages = [
-    _OnboardingPage('One Tap Away', 'Press SOS and help is on the way within seconds.',
-        [Color(0xFFFF2D3B), Color(0xFF7A1020)]),
-    _OnboardingPage('We Notify First', 'Hospitals receive your details before the ambulance arrives.',
-        [Color(0xFF3B82F6), Color(0xFF11233F)]),
-    _OnboardingPage('Your Hospital, Your Choice', 'Confirm the nearest hospital or pick another — only that hospital is alerted.',
-        [Color(0xFF00D68F), Color(0xFF0C3A2C)]),
+    _OnboardingPage(
+      'Hold SOS. That is all.',
+      'No sign-up, no password. Hold the button for three seconds and the '
+          'nearest ambulances are offered your emergency.',
+      AppAssets.onboardingSos,
+      Resq.criticalTint,
+    ),
+    _OnboardingPage(
+      'The hospital knows before you arrive',
+      'Your location, and anything you tell us on the way, reaches the '
+          'emergency ward while the ambulance is still moving.',
+      AppAssets.onboardingHospital,
+      Resq.infoTint,
+    ),
+    _OnboardingPage(
+      'Your hospital, your choice',
+      'Take the nearest one or pick another. Only the hospital you confirm '
+          'is alerted.',
+      AppAssets.onboardingChoice,
+      Resq.readyTint,
+    ),
   ];
 
   @override
@@ -60,7 +81,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: Resq.canvas,
       body: SafeArea(
         child: Column(
           children: [
@@ -76,28 +97,29 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       Expanded(
                         flex: 55,
                         child: Container(
-                          margin: const EdgeInsets.all(24),
+                          margin: const EdgeInsets.all(Resq.space6),
                           decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              colors: p.gradient,
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                            ),
-                            borderRadius: BorderRadius.circular(28),
+                            color: p.tint,
+                            borderRadius: BorderRadius.circular(Resq.radiusCard),
+                          ),
+                          clipBehavior: Clip.antiAlias,
+                          child: Image.asset(
+                            p.illustration,
+                            fit: BoxFit.contain,
+                            errorBuilder: (_, __, ___) => const SizedBox.shrink(),
                           ),
                         ),
                       ),
                       Expanded(
                         flex: 45,
                         child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 32),
+                          padding: const EdgeInsets.symmetric(horizontal: Resq.space8),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(p.headline, style: AppTextStyles.display),
-                              const SizedBox(height: 12),
-                              Text(p.body,
-                                  style: AppTextStyles.body.copyWith(color: AppColors.textSecondary)),
+                              Text(p.headline, style: ResqType.display()),
+                              const SizedBox(height: Resq.space3),
+                              Text(p.body, style: ResqType.body(color: Resq.inkSoft)),
                             ],
                           ),
                         ),
@@ -117,8 +139,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   width: active ? 24 : 8,
                   height: 8,
                   decoration: BoxDecoration(
-                    color: active ? AppColors.sosRed : AppColors.surfaceThree,
-                    borderRadius: BorderRadius.circular(4),
+                    color: active ? Resq.brandInk : Resq.border,
+                    borderRadius: BorderRadius.circular(Resq.radiusPill),
                   ),
                 );
               }),

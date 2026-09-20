@@ -14,6 +14,8 @@ import '../../features/auth/screens/login_screen.dart';
 import '../../features/auth/screens/medical_profile_screen.dart';
 import '../../features/home/screens/home_screen.dart';
 import '../../features/more/screens/more_screen.dart';
+import '../../features/driver/screens/driver_area_screen.dart';
+import '../../features/driver/screens/driver_history_screen.dart';
 import '../../features/driver/screens/driver_home_screen.dart';
 import '../../features/driver/screens/driver_navigation_screen.dart';
 import '../../features/sos/screens/my_requests_screen.dart';
@@ -58,6 +60,8 @@ class Routes {
   // Driver
   static const String driverHome = '/driver-home';
   static const String driverNavigation = '/driver-navigation';
+  static const String driverHistory = '/driver/history';
+  static const String driverArea = '/driver/area';
   static const String profile = '/profile';
 }
 
@@ -71,6 +75,8 @@ class Routes {
 const Set<String> _guardedRoutes = {
   Routes.driverHome,
   Routes.driverNavigation,
+  Routes.driverHistory,
+  Routes.driverArea,
   Routes.profile,
   Routes.medicalProfile,
 };
@@ -232,5 +238,7 @@ final appRouter = GoRouter(
       path: Routes.driverNavigation,
       pageBuilder: (c, s) => _page(DriverNavigationScreen(caseId: s.extra as String? ?? '')),
     ),
+    GoRoute(path: Routes.driverHistory, pageBuilder: (c, s) => _page(const DriverHistoryScreen())),
+    GoRoute(path: Routes.driverArea, pageBuilder: (c, s) => _page(const DriverAreaScreen())),
   ],
 );

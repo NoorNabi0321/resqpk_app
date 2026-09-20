@@ -1,22 +1,28 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:go_router/go_router.dart';
 
-import '../../../core/constants/app_colors.dart';
-import '../../../core/constants/app_text_styles.dart';
 import '../../../core/connectivity/connectivity_provider.dart';
 import '../../../core/location/location_provider.dart';
 import '../../../core/realtime/realtime_provider.dart';
 import '../../../core/router/app_router.dart';
+import '../../../core/theme/tokens.dart';
+import '../../../core/theme/typography.dart';
 import '../../../core/widgets/back_guard.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../sos/data/models/dispatch_request_model.dart';
+import '../providers/driver_history_provider.dart';
 import '../providers/driver_realtime_provider.dart';
+import '../widgets/driver_chrome.dart';
 import 'dispatch_request_screen.dart';
 
-/// Module 3 working driver screen: go online/offline + live GPS broadcast.
-/// Module 4 replaces this with the full dispatch UI.
+/// Duty screen — the driver's home.
+///
+/// One decision lives here: are you taking emergencies right now. Everything
+/// else on the screen exists to answer the questions that decision raises —
+/// can the server hear me, does the phone know where I am, and what have I done
+/// today.
 class DriverHomeScreen extends ConsumerStatefulWidget {
   const DriverHomeScreen({super.key});
 
@@ -25,7 +31,6 @@ class DriverHomeScreen extends ConsumerStatefulWidget {
 }
 
 class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
-  int _broadcastCount = 0;
   bool _dialogOpen = false;
 
   Future<void> _showDispatchRequest(DispatchRequestModel request) async {
@@ -45,13 +50,25 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
     );
     _dialogOpen = false;
     if (!mounted) return;
+
     if (result == 'accepted') {
       context.go(Routes.driverNavigation, extra: request.caseId);
     } else if (result == 'expired') {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Request expired — another driver took it')),
+        const SnackBar(content: Text('Request expired — another ambulance took it')),
       );
+    } else if (result == 'declined' || result == 'timeout') {
+      // The count of what you turned down is part of your record too.
+      ref.invalidate(driverHistoryProvider);
     }
+  }
+
+  Future<void> _logout(DriverOnlineState driverState) async {
+    if (driverState.isOnline) {
+      await ref.read(driverOnlineProvider.notifier).goOffline();
+    }
+    await ref.read(authProvider.notifier).logout();
+    if (mounted) context.go(Routes.roleSelect);
   }
 
   @override
@@ -59,25 +76,13 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
     // Keep the socket connected while this screen is open.
     ref.watch(socketConnectionProvider);
 
-    // Incoming dispatch requests → full-screen overlay.
+    // Incoming dispatch requests → full-screen interrupt.
     ref.listen(caseUpdateStreamProvider, (_, next) {
       next.whenData((data) {
         if (data['event'] == 'case_created') {
           _showDispatchRequest(DispatchRequestModel.fromJson(data));
         }
       });
-    });
-
-    // Count each location broadcast the backend echoes back to us.
-    ref.listen(driverLocationStreamProvider, (_, next) {
-      next.whenData((_) {
-        if (mounted) setState(() => _broadcastCount++);
-      });
-    });
-
-    // Reset the counter when going offline.
-    ref.listen(driverOnlineProvider.select((s) => s.isOnline), (_, isOnline) {
-      if (!isOnline && mounted) setState(() => _broadcastCount = 0);
     });
 
     // Surface errors from going online/offline.
@@ -90,175 +95,250 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
     final driverState = ref.watch(driverOnlineProvider);
     // Must be a reactive source. Reading socketServiceProvider's .isConnected
     // captured `false` at first build and never rebuilt, which left this screen
-    // stuck on "Disconnected" with Go Online disabled.
+    // stuck on "Disconnected" with the toggle disabled.
     final isConnected = ref.watch(socketReadyProvider).value ??
         ref.read(socketServiceProvider).isAuthenticated;
-    final isOnline = ref.watch(isOnlineProvider).value ?? true;
-    final positionAsync = ref.watch(currentPositionStreamProvider);
-    final position = positionAsync.asData?.value ?? driverState.currentPosition;
+    final hasInternet = ref.watch(isOnlineProvider).value ?? true;
+    final position = ref.watch(currentPositionStreamProvider).asData?.value ??
+        driverState.currentPosition;
+    final user = ref.watch(currentUserProvider);
+    final history = ref.watch(driverHistoryProvider);
+
+    final duty = !isConnected && !driverState.isOnline
+        ? DutyState.connecting
+        : (driverState.isOnline ? DutyState.online : DutyState.offline);
 
     return ExitGuard(
-      child: Scaffold(
-      backgroundColor: AppColors.background,
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+      child: DriverScaffold(
+        title: user?.fullName ?? 'Driver',
+        subtitle: isConnected ? 'Connected to ResQPK' : 'Not connected',
+        actions: [
+          DriverRoundButton(
+            icon: Icons.logout_rounded,
+            tint: Resq.critical,
+            onTap: () => _logout(driverState),
+          ),
+        ],
+        body: RefreshIndicator(
+          color: Resq.ready,
+          backgroundColor: ResqDark.surface,
+          onRefresh: () async => ref.invalidate(driverHistoryProvider),
+          child: ListView(
+            padding: const EdgeInsets.only(bottom: Resq.space6),
             children: [
-              const SizedBox(height: 8),
-              Text('Driver', style: AppTextStyles.display.copyWith(fontSize: 28)),
-              const SizedBox(height: 6),
-              _connectionRow(isConnected),
-              if (!isOnline) ...[
-                const SizedBox(height: 12),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: AppColors.warningAmber.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppColors.warningAmber.withValues(alpha: 0.4)),
-                  ),
-                  child: Text(
-                    '📵 Offline — location updates paused. They resume automatically when back online.',
-                    style: AppTextStyles.caption.copyWith(color: AppColors.warningAmber),
-                  ),
+              if (!hasInternet)
+                const _Warning(
+                  icon: Icons.wifi_off_rounded,
+                  text: 'No internet. Location updates pause and resume on their own.',
                 ),
-              ],
-              const SizedBox(height: 32),
-              _toggle(driverState, isConnected),
-              const SizedBox(height: 24),
-              _gpsCard(position),
-              const SizedBox(height: 16),
-              _infoCard('Location updates sent', '$_broadcastCount'),
-              const SizedBox(height: 16),
-              _infoCard(
-                'Coordinates',
-                position != null
-                    ? '${position.latitude.toStringAsFixed(5)}, ${position.longitude.toStringAsFixed(5)}'
-                    : '—',
+              DutyToggle(
+                state: duty,
+                busy: driverState.isLoading,
+                onTap: duty == DutyState.connecting
+                    ? null
+                    : () {
+                        final notifier = ref.read(driverOnlineProvider.notifier);
+                        driverState.isOnline ? notifier.goOffline() : notifier.goOnline();
+                      },
               ),
-              const Spacer(),
-              OutlinedButton(
-                onPressed: () async {
-                  if (driverState.isOnline) {
-                    await ref.read(driverOnlineProvider.notifier).goOffline();
-                  }
-                  await ref.read(authProvider.notifier).logout();
-                  if (context.mounted) context.go(Routes.roleSelect);
-                },
-                style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: AppColors.sosRed),
-                  padding: const EdgeInsets.symmetric(vertical: 14),
+              const SizedBox(height: Resq.space4),
+              _GpsCard(position: position, broadcasting: driverState.isBroadcasting),
+              const SizedBox(height: Resq.space4),
+
+              Text('Your record', style: ResqType.section(color: ResqDark.ink)),
+              const SizedBox(height: Resq.space3),
+              history.when(
+                loading: () => const _StatsRow(
+                  today: '—',
+                  completed: '—',
+                  acceptRate: '—',
                 ),
-                child: Text('Logout',
-                    style: AppTextStyles.buttonLabel.copyWith(color: AppColors.sosRed)),
+                error: (_, __) => const _StatsRow(today: '—', completed: '—', acceptRate: '—'),
+                data: (h) => _StatsRow(
+                  today: '${h.stats.today}',
+                  completed: '${h.stats.completed}',
+                  acceptRate: h.stats.acceptRate == null ? '—' : '${h.stats.acceptRate}%',
+                ),
+              ),
+              const SizedBox(height: Resq.space4),
+
+              _NavCard(
+                icon: Icons.history_rounded,
+                title: 'Run history',
+                subtitle: 'Every emergency you have answered',
+                onTap: () => context.push(Routes.driverHistory),
+              ),
+              const SizedBox(height: Resq.space3),
+              _NavCard(
+                icon: Icons.map_rounded,
+                title: 'My area',
+                subtitle: 'Hospitals and camps around you',
+                onTap: () => context.push(Routes.driverArea),
               ),
             ],
           ),
         ),
       ),
-      ),
     );
   }
+}
 
-  Widget _connectionRow(bool isConnected) {
-    final color = isConnected ? AppColors.confirmedGreen : AppColors.sosRed;
+class _StatsRow extends StatelessWidget {
+  const _StatsRow({required this.today, required this.completed, required this.acceptRate});
+
+  final String today;
+  final String completed;
+  final String acceptRate;
+
+  @override
+  Widget build(BuildContext context) {
     return Row(
       children: [
-        Container(width: 10, height: 10, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
-        const SizedBox(width: 8),
-        Text(isConnected ? 'Connected to ResQPK' : 'Disconnected',
-            style: AppTextStyles.caption.copyWith(color: color)),
+        Expanded(
+          child: StatTile(
+            value: today,
+            label: 'Runs today',
+            icon: Icons.today_rounded,
+            color: Resq.ready,
+          ),
+        ),
+        const SizedBox(width: Resq.space3),
+        Expanded(
+          child: StatTile(
+            value: completed,
+            label: 'Completed',
+            icon: Icons.check_circle_outline_rounded,
+            color: Resq.info,
+          ),
+        ),
+        const SizedBox(width: Resq.space3),
+        Expanded(
+          child: StatTile(
+            value: acceptRate,
+            label: 'Offers accepted',
+            icon: Icons.percent_rounded,
+            color: Resq.decision,
+          ),
+        ),
       ],
     );
   }
+}
 
-  Widget _toggle(DriverOnlineState s, bool isConnected) {
-    final online = s.isOnline;
-    // Going online is a socket round-trip, so block the tap until the socket
-    // is actually up rather than letting it run into a timeout.
-    final blocked = s.isLoading || (!online && !isConnected);
-    return GestureDetector(
-      onTap: blocked
-          ? null
-          : () {
-              final notifier = ref.read(driverOnlineProvider.notifier);
-              if (online) {
-                notifier.goOffline();
-              } else {
-                notifier.goOnline();
-              }
-            },
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 300),
-        height: 72,
-        decoration: BoxDecoration(
-          color: online
-            ? AppColors.confirmedGreen
-            : (isConnected ? AppColors.surfaceThree : AppColors.surfaceTwo),
-          borderRadius: BorderRadius.circular(36),
-        ),
-        alignment: Alignment.center,
-        child: s.isLoading
-            ? const SizedBox(
-                width: 26,
-                height: 26,
-                child: CircularProgressIndicator(strokeWidth: 2.6, color: Colors.white),
-              )
-            : Text(
-                online
-                    ? 'You are Online'
-                    : (isConnected ? 'You are Offline' : 'Connecting to server…'),
-                style: AppTextStyles.buttonLabel
-                    .copyWith(color: online ? Colors.white : AppColors.textSecondary),
-              ),
-      ),
-    );
-  }
+/// GPS quality, in the only terms that matter: can dispatch find you.
+class _GpsCard extends StatelessWidget {
+  const _GpsCard({required this.position, required this.broadcasting});
 
-  Widget _gpsCard(Position? position) {
-    String label = 'Waiting for GPS…';
-    Color color = AppColors.textSecondary;
-    if (position != null) {
-      final acc = position.accuracy;
-      label = 'GPS accuracy: ${acc.toStringAsFixed(0)} m';
-      color = acc < 30
-          ? AppColors.confirmedGreen
-          : (acc <= 60 ? AppColors.warningAmber : AppColors.sosRed);
-    }
-    return _shell(
+  final Position? position;
+  final bool broadcasting;
+
+  @override
+  Widget build(BuildContext context) {
+    final accuracy = position?.accuracy;
+    final (color, label) = switch (accuracy) {
+      null => (ResqDark.inkMuted, 'Waiting for GPS…'),
+      < 30 => (Resq.ready, 'GPS is good'),
+      < 60 => (Resq.decision, 'GPS is rough — dispatch may misjudge your distance'),
+      _ => (Resq.critical, 'GPS is poor — move away from buildings'),
+    };
+
+    return DriverCard(
+      accent: color,
       child: Row(
         children: [
-          Icon(Icons.gps_fixed, color: color, size: 20),
-          const SizedBox(width: 12),
-          Text(label, style: AppTextStyles.body.copyWith(color: color)),
+          Icon(Icons.gps_fixed_rounded, color: color, size: 20),
+          const SizedBox(width: Resq.space3),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label, style: ResqType.bodyStrong(color: ResqDark.ink)),
+                const SizedBox(height: 2),
+                Text(
+                  accuracy == null
+                      ? 'Your position is what dispatch sorts ambulances by.'
+                      : 'Accurate to about ${accuracy.toStringAsFixed(0)} m'
+                          '${broadcasting ? ' · sharing live' : ''}',
+                  style: ResqType.caption(color: ResqDark.inkMuted),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
   }
+}
 
-  Widget _infoCard(String label, String value) {
-    return _shell(
+class _NavCard extends StatelessWidget {
+  const _NavCard({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return DriverCard(
+      onTap: onTap,
+      padding: const EdgeInsets.all(Resq.space3),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: AppTextStyles.caption),
-          Text(value, style: AppTextStyles.subtitle),
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: ResqDark.surfaceHigh,
+              borderRadius: BorderRadius.circular(Resq.radiusControl),
+            ),
+            child: Icon(icon, color: ResqDark.ink, size: 21),
+          ),
+          const SizedBox(width: Resq.space3),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: ResqType.bodyStrong(color: ResqDark.ink)),
+                Text(subtitle, style: ResqType.caption(color: ResqDark.inkMuted)),
+              ],
+            ),
+          ),
+          const Icon(Icons.chevron_right_rounded, color: ResqDark.inkFaint),
         ],
       ),
     );
   }
+}
 
-  Widget _shell({required Widget child}) {
+class _Warning extends StatelessWidget {
+  const _Warning({required this.icon, required this.text});
+
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.only(bottom: Resq.space3),
+      padding: const EdgeInsets.all(Resq.space3),
       decoration: BoxDecoration(
-        color: AppColors.surfaceTwo,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.borderGlass),
+        color: Resq.decision.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(Resq.radiusControl),
+        border: Border.all(color: Resq.decision.withValues(alpha: 0.4)),
       ),
-      child: child,
+      child: Row(
+        children: [
+          Icon(icon, size: 18, color: Resq.decision),
+          const SizedBox(width: Resq.space2),
+          Expanded(child: Text(text, style: ResqType.caption(color: Resq.decision))),
+        ],
+      ),
     );
   }
 }
