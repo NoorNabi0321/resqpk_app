@@ -1,18 +1,19 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:shimmer/shimmer.dart';
 
-import '../../../core/constants/app_colors.dart';
-import '../../../core/constants/app_text_styles.dart';
 import '../../../core/connectivity/connectivity_provider.dart';
+import '../../../core/constants/app_assets.dart';
 import '../../../core/router/app_router.dart';
+import '../../../core/theme/tokens.dart';
+import '../../../core/theme/typography.dart';
+import '../../../core/widgets/state_views.dart';
 import '../data/models/first_aid_guide_model.dart';
 import '../providers/first_aid_provider.dart';
 
+/// Kept for the AI report screen, which labels its suggested guides with these.
 const Map<String, String> kCategoryEmoji = {
   'CPR': '❤️',
   'Choking': '🫁',
@@ -35,6 +36,11 @@ const List<String> kCategories = [
   'Drowning',
 ];
 
+/// The guide library — a wall of covers.
+///
+/// Picked over a list of titles because this screen is used in two very
+/// different moods: browsing calmly, and hunting for one specific thing while
+/// someone is hurt. A picture is found faster than a line of text in the second.
 class FirstAidScreen extends ConsumerStatefulWidget {
   const FirstAidScreen({super.key});
 
@@ -66,292 +72,239 @@ class _FirstAidScreenState extends ConsumerState<FirstAidScreen> {
     final notifier = ref.read(firstAidProvider.notifier);
     final isOnline = ref.watch(isOnlineProvider).value ?? true;
     final ur = state.selectedLanguage == 'ur';
-    final showFeatured = state.searchQuery.isEmpty && state.selectedCategory == null;
-    final featured = state.guides.where((g) => g.isFeatured).toList();
 
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Header + language toggle
-              Row(
+    return SafeArea(
+      bottom: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(Resq.space4, Resq.space4, Resq.space4, 0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Expanded(child: Text('First aid', style: ResqType.display())),
+                _LangPill(
+                  label: 'EN',
+                  active: !ur,
+                  onTap: () => notifier.setLanguage('en'),
+                ),
+                const SizedBox(width: Resq.space2),
+                _LangPill(
+                  label: 'اردو',
+                  active: ur,
+                  onTap: () => notifier.setLanguage('ur'),
+                ),
+              ],
+            ),
+            const SizedBox(height: Resq.space3),
+
+            TextField(
+              controller: _searchController,
+              onChanged: _onSearchChanged,
+              style: ResqType.body(),
+              decoration: InputDecoration(
+                prefixIcon: const Icon(Icons.search_rounded, color: Resq.inkMuted),
+                hintText: ur ? 'رہنمائی تلاش کریں…' : 'Search guides',
+                hintStyle: ResqType.body(color: Resq.inkFaint),
+                filled: true,
+                fillColor: Resq.surface,
+                suffixIcon: state.searchQuery.isEmpty
+                    ? null
+                    : IconButton(
+                        icon: const Icon(Icons.close_rounded, size: 18, color: Resq.inkMuted),
+                        onPressed: () {
+                          _searchController.clear();
+                          notifier.search('');
+                        },
+                      ),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(Resq.radiusControl),
+                  borderSide: BorderSide(color: Resq.border),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(Resq.radiusControl),
+                  borderSide: BorderSide(color: Resq.border),
+                ),
+              ),
+            ),
+
+            // Cached guides are the whole point of this screen offline — say so
+            // rather than leaving someone wondering whether it is stale.
+            if (!isOnline && state.isOfflineCacheAvailable)
+              const _Note(
+                icon: Icons.offline_pin_rounded,
+                text: 'Offline — showing saved guides',
+                color: Resq.ready,
+              ),
+            if (isOnline && state.isSyncing)
+              const _Note(
+                icon: Icons.sync_rounded,
+                text: 'Updating guides…',
+                color: Resq.info,
+              ),
+
+            const SizedBox(height: Resq.space3),
+
+            SizedBox(
+              height: 36,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
                 children: [
-                  IconButton(
-                    icon: const Icon(Icons.arrow_back, color: AppColors.textPrimary),
-                    onPressed: () => context.pop(),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
+                  _CategoryPill(
+                    label: 'All',
+                    active: state.selectedCategory == null,
+                    onTap: () => notifier.filterByCategory(null),
                   ),
-                  const SizedBox(width: 8),
-                  Expanded(child: Text('First Aid Library', style: AppTextStyles.title)),
-                  _langPill('EN', !ur, () => notifier.setLanguage('en')),
-                  const SizedBox(width: 6),
-                  _langPill('اردو', ur, () => notifier.setLanguage('ur')),
+                  for (final c in kCategories)
+                    _CategoryPill(
+                      label: c,
+                      active: state.selectedCategory == c,
+                      onTap: () => notifier.filterByCategory(c),
+                    ),
                 ],
               ),
-              const SizedBox(height: 12),
+            ),
+            const SizedBox(height: Resq.space4),
 
-              // Search
-              TextField(
-                controller: _searchController,
-                onChanged: _onSearchChanged,
-                style: AppTextStyles.body,
-                decoration: InputDecoration(
-                  prefixIcon: const Icon(Icons.search, color: AppColors.textSecondary),
-                  hintText: ur ? 'رہنمائی تلاش کریں...' : 'Search guides...',
-                  hintStyle: AppTextStyles.caption,
-                  filled: true,
-                  fillColor: AppColors.surfaceTwo,
-                  suffixIcon: state.searchQuery.isNotEmpty
-                      ? IconButton(
-                          icon: const Icon(Icons.close, size: 18, color: AppColors.textSecondary),
-                          onPressed: () {
-                            _searchController.clear();
-                            notifier.search('');
-                          },
-                        )
-                      : null,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(16),
-                    borderSide: BorderSide.none,
-                  ),
-                ),
-              ),
-
-              // Status banners
-              if (state.isOfflineCacheAvailable && !isOnline)
-                _banner('📥 Offline — Using saved guides', AppColors.confirmedGreen),
-              if (isOnline && state.isSyncing) _banner('Syncing…', AppColors.infoBlue),
-
-              const SizedBox(height: 12),
-
-              // Category filter
-              SizedBox(
-                height: 36,
-                child: ListView(
-                  scrollDirection: Axis.horizontal,
-                  children: [
-                    _categoryPill('All', state.selectedCategory == null,
-                        () => notifier.filterByCategory(null)),
-                    ...kCategories.map((c) => _categoryPill(
-                          c,
-                          state.selectedCategory == c,
-                          () => notifier.filterByCategory(c),
-                        )),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 12),
-
-              Expanded(child: _body(state, notifier, showFeatured, featured)),
-            ],
-          ),
+            Expanded(child: _body(state, notifier)),
+          ],
         ),
       ),
     );
   }
 
-  Widget _body(
-    FirstAidState state,
-    FirstAidNotifier notifier,
-    bool showFeatured,
-    List<FirstAidGuideModel> featured,
-  ) {
-    if (state.isLoading && state.guides.isEmpty) return _shimmerGrid();
+  Widget _body(FirstAidState state, FirstAidNotifier notifier) {
+    if (state.isLoading && state.guides.isEmpty) {
+      return const LoadingSkeleton(lines: 3, height: 150);
+    }
 
     if (state.error != null && state.guides.isEmpty) {
-      return _centered([
-        Text('Could not load guides', style: AppTextStyles.body),
-        if (state.isOfflineCacheAvailable)
-          Text('Using offline cache', style: AppTextStyles.caption),
-        const SizedBox(height: 12),
-        ElevatedButton(
-          onPressed: () => notifier.loadGuides(forceRefresh: true),
-          child: const Text('Retry'),
-        ),
-      ]);
+      return ErrorState(
+        illustration: AppAssets.stateOffline,
+        title: 'Could not load the guides',
+        message: 'They download once and then work offline.',
+        onRetry: () => notifier.loadGuides(forceRefresh: true),
+      );
     }
 
     if (state.filteredGuides.isEmpty) {
-      return _centered([
-        const Text('🔍', style: TextStyle(fontSize: 40)),
-        const SizedBox(height: 8),
-        Text(
-          state.searchQuery.isNotEmpty
-              ? 'No guides found for "${state.searchQuery}"'
-              : 'No guides found',
-          style: AppTextStyles.body,
-          textAlign: TextAlign.center,
-        ),
-        const SizedBox(height: 12),
-        TextButton(
-          onPressed: () {
-            _searchController.clear();
-            notifier.search('');
-            notifier.filterByCategory(null);
-          },
-          child: const Text('Clear Search'),
-        ),
-      ]);
+      return EmptyState(
+        illustration: AppAssets.stateError,
+        title: state.searchQuery.isNotEmpty
+            ? 'Nothing matches "${state.searchQuery}"'
+            : 'No guides in this category yet',
+        actionLabel: 'Show all guides',
+        onAction: () {
+          _searchController.clear();
+          notifier.search('');
+          notifier.filterByCategory(null);
+        },
+      );
     }
 
     return RefreshIndicator(
       onRefresh: () => notifier.loadGuides(forceRefresh: true),
-      color: AppColors.sosRed,
-      child: CustomScrollView(
-        slivers: [
-          if (showFeatured && featured.isNotEmpty) ...[
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Text('Essential Guides',
-                    style: AppTextStyles.body.copyWith(fontWeight: FontWeight.bold)),
-              ),
-            ),
-            SliverToBoxAdapter(
-              child: SizedBox(
-                height: 124,
-                child: ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: featured.length,
-                  separatorBuilder: (_, __) => const SizedBox(width: 12),
-                  itemBuilder: (_, i) => _featuredCard(featured[i], state.selectedLanguage),
-                ),
-              ),
-            ),
-            const SliverToBoxAdapter(child: SizedBox(height: 16)),
-          ],
-          SliverGrid(
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              crossAxisSpacing: 12,
-              mainAxisSpacing: 12,
-              childAspectRatio: 0.92,
-            ),
-            delegate: SliverChildBuilderDelegate(
-              (_, i) => _GuideCard(
-                guide: state.filteredGuides[i],
-                language: state.selectedLanguage,
-                onTap: () => context.push(Routes.guideDetail, extra: state.filteredGuides[i]),
-              ),
-              childCount: state.filteredGuides.length,
-            ),
-          ),
-          const SliverToBoxAdapter(child: SizedBox(height: 16)),
-        ],
+      color: Resq.brandInk,
+      child: GridView.builder(
+        padding: const EdgeInsets.only(bottom: Resq.space6),
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          crossAxisSpacing: Resq.space3,
+          mainAxisSpacing: Resq.space3,
+          childAspectRatio: 0.78,
+        ),
+        itemCount: state.filteredGuides.length,
+        itemBuilder: (_, i) {
+          final guide = state.filteredGuides[i];
+          return _GuideCard(
+            guide: guide,
+            language: state.selectedLanguage,
+            onTap: () => context.push(Routes.guideDetail, extra: guide),
+          );
+        },
       ),
     );
   }
-
-  Widget _centered(List<Widget> children) => Center(
-        child: Column(mainAxisSize: MainAxisSize.min, children: children),
-      );
-
-  Widget _langPill(String label, bool active, VoidCallback onTap) => GestureDetector(
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          decoration: BoxDecoration(
-            color: active ? AppColors.infoBlue : AppColors.surfaceTwo,
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: Text(label,
-              style: AppTextStyles.caption
-                  .copyWith(color: active ? Colors.white : AppColors.textSecondary)),
-        ),
-      );
-
-  Widget _categoryPill(String label, bool active, VoidCallback onTap) => Padding(
-        padding: const EdgeInsets.only(right: 8),
-        child: GestureDetector(
-          onTap: onTap,
-          child: Container(
-            alignment: Alignment.center,
-            padding: const EdgeInsets.symmetric(horizontal: 14),
-            decoration: BoxDecoration(
-              color: active ? AppColors.infoBlue : Colors.transparent,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: active ? AppColors.infoBlue : AppColors.borderGlass),
-            ),
-            child: Text(label,
-                style: AppTextStyles.caption
-                    .copyWith(color: active ? Colors.white : AppColors.textSecondary)),
-          ),
-        ),
-      );
-
-  Widget _banner(String text, Color color) => Padding(
-        padding: const EdgeInsets.only(top: 8),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(text, style: AppTextStyles.caption.copyWith(color: color)),
-            ],
-          ),
-        ),
-      );
-
-  Widget _featuredCard(FirstAidGuideModel g, String lang) => GestureDetector(
-        onTap: () => context.push(Routes.guideDetail, extra: g),
-        child: Container(
-          width: 160,
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: AppColors.sosRed.withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: AppColors.sosRed.withValues(alpha: 0.3)),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(kCategoryEmoji[g.category] ?? '🩹', style: const TextStyle(fontSize: 26)),
-              const Spacer(),
-              Text(g.getTitle(lang),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppTextStyles.body.copyWith(color: Colors.white)),
-              const SizedBox(height: 2),
-              Text('${g.getSteps(lang).length} steps', style: AppTextStyles.caption),
-            ],
-          ),
-        ),
-      );
-
-  Widget _shimmerGrid() => GridView.count(
-        crossAxisCount: 2,
-        crossAxisSpacing: 12,
-        mainAxisSpacing: 12,
-        childAspectRatio: 0.92,
-        children: List.generate(
-          4,
-          (_) => Shimmer.fromColors(
-            baseColor: AppColors.surfaceTwo,
-            highlightColor: AppColors.surfaceOne,
-            child: Container(
-              decoration: BoxDecoration(
-                color: AppColors.surfaceTwo,
-                borderRadius: BorderRadius.circular(16),
-              ),
-            ),
-          ),
-        ),
-      );
 }
 
 class _GuideCard extends StatelessWidget {
   const _GuideCard({required this.guide, required this.language, required this.onTap});
+
   final FirstAidGuideModel guide;
   final String language;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final cover = FirstAidArt.cover(guide.slug);
+    final steps = guide.getSteps(language).length;
+
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        decoration: BoxDecoration(
+          color: Resq.surface,
+          borderRadius: BorderRadius.circular(Resq.radiusCard),
+          border: Border.all(color: Resq.border),
+          boxShadow: Resq.cardShadow,
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              child: cover == null
+                  ? _EmojiCover(category: guide.category)
+                  : Image.asset(
+                      cover,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => _EmojiCover(category: guide.category),
+                    ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(Resq.space3, Resq.space3, Resq.space3, Resq.space3),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    guide.getTitle(language),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: ResqType.bodyStrong(),
+                  ),
+                  const SizedBox(height: 2),
+                  Text('$steps steps', style: ResqType.caption()),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Stand-in for the three guides still waiting on artwork.
+class _EmojiCover extends StatelessWidget {
+  const _EmojiCover({required this.category});
+
+  final String category;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: Resq.brandTint,
+      alignment: Alignment.center,
+      child: Text(kCategoryEmoji[category] ?? '🩹', style: const TextStyle(fontSize: 44)),
+    );
+  }
+}
+
+class _LangPill extends StatelessWidget {
+  const _LangPill({required this.label, required this.active, required this.onTap});
+
+  final String label;
+  final bool active;
   final VoidCallback onTap;
 
   @override
@@ -359,42 +312,66 @@ class _GuideCard extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.symmetric(horizontal: Resq.space3, vertical: 8),
         decoration: BoxDecoration(
-          color: AppColors.surfaceTwo,
-          borderRadius: BorderRadius.circular(16),
+          color: active ? Resq.brandInk : Resq.surfaceAlt,
+          borderRadius: BorderRadius.circular(Resq.radiusPill),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(kCategoryEmoji[guide.category] ?? '🩹', style: const TextStyle(fontSize: 30)),
-            const Spacer(),
-            Text(
-              guide.getTitle(language),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: AppTextStyles.body.copyWith(color: Colors.white, fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 4),
-            Row(
-              children: [
-                Text('${guide.getSteps(language).length} steps', style: AppTextStyles.caption),
-                const Spacer(),
-                if (guide.isFeatured)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: AppColors.warningAmber.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text('⭐',
-                        style: AppTextStyles.caption.copyWith(fontSize: 9)),
-                  ),
-              ],
-            ),
-          ],
+        child: Text(label, style: ResqType.caption(color: active ? Colors.white : Resq.inkSoft)),
+      ),
+    );
+  }
+}
+
+class _CategoryPill extends StatelessWidget {
+  const _CategoryPill({required this.label, required this.active, required this.onTap});
+
+  final String label;
+  final bool active;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(right: Resq.space2),
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          alignment: Alignment.center,
+          padding: const EdgeInsets.symmetric(horizontal: Resq.space4),
+          decoration: BoxDecoration(
+            color: active ? Resq.brandInk : Resq.surface,
+            borderRadius: BorderRadius.circular(Resq.radiusPill),
+            border: Border.all(color: active ? Resq.brandInk : Resq.border),
+          ),
+          child: Text(
+            label,
+            style: ResqType.caption(color: active ? Colors.white : Resq.inkSoft),
+          ),
         ),
       ),
-    ).animate().scale(begin: const Offset(0.96, 0.96), end: const Offset(1, 1), duration: 150.ms);
+    );
+  }
+}
+
+class _Note extends StatelessWidget {
+  const _Note({required this.icon, required this.text, required this.color});
+
+  final IconData icon;
+  final String text;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: Resq.space2),
+      child: Row(
+        children: [
+          Icon(icon, size: 15, color: color),
+          const SizedBox(width: Resq.space2),
+          Text(text, style: ResqType.caption(color: color)),
+        ],
+      ),
+    );
   }
 }
