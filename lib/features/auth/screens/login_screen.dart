@@ -23,14 +23,29 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _password = TextEditingController();
   bool _obscure = true;
 
+  /// Which kind of account is signing in.
+  ///
+  /// It used to be read straight from the link, and one caller forgot to pass
+  /// it — so a driver arrived here in patient mode, their correct credentials
+  /// were checked against patient accounts, and they were told the phone or
+  /// password was wrong. The link only seeds this now; the screen shows it, and
+  /// the person signing in can correct it.
+  String? _role;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _role ??= GoRouterState.of(context).uri.queryParameters['role'] == 'driver'
+        ? 'driver'
+        : 'patient';
+  }
+
   @override
   void dispose() {
     _phone.dispose();
     _password.dispose();
     super.dispose();
   }
-
-  String get _role => GoRouterState.of(context).uri.queryParameters['role'] ?? 'patient';
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
@@ -51,7 +66,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     final loading = ref.watch(authProvider).isLoading;
-    final roleLabel = _role == 'driver' ? 'Driver' : 'Patient';
+    final roleLabel = _role == 'driver' ? 'driver' : 'patient';
     return Scaffold(
       backgroundColor: Resq.canvas,
       appBar: AppBar(backgroundColor: Colors.transparent, foregroundColor: Resq.ink),
@@ -63,11 +78,22 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text('Welcome Back, $roleLabel', style: ResqType.display().copyWith(fontSize: 28)),
+                Text('Welcome back', style: ResqType.display().copyWith(fontSize: 28)),
                 const SizedBox(height: 8),
-                Text('Log in to continue',
-                    style: ResqType.body().copyWith(color: Resq.inkSoft)),
-                const SizedBox(height: 32),
+                Text(
+                  'Sign in as a $roleLabel',
+                  style: ResqType.body().copyWith(color: Resq.inkSoft),
+                ),
+                const SizedBox(height: Resq.space5),
+
+                // Visible, and changeable. Driver and patient accounts are
+                // checked separately on the server, so picking the wrong one
+                // looks exactly like a wrong password.
+                _RoleSelector(
+                  role: _role ?? 'patient',
+                  onChanged: (role) => setState(() => _role = role),
+                ),
+                const SizedBox(height: Resq.space5),
                 GlassTextField(
                   label: 'Phone Number',
                   hint: '03XXXXXXXXX',
@@ -93,11 +119,95 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 TextButton(
                   onPressed: () => context.go(
                       _role == 'driver' ? Routes.driverRegister : Routes.patientRegister),
-                  child: Text("Don't have an account? Register",
-                      style: ResqType.caption().copyWith(color: Resq.info)),
+                  child: Text(
+                    _role == 'driver'
+                        ? 'New driver? Register your ambulance'
+                        : "Don't have an account? Register",
+                    style: ResqType.caption().copyWith(color: Resq.info),
+                  ),
                 ),
               ],
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Patient or driver, said out loud.
+class _RoleSelector extends StatelessWidget {
+  const _RoleSelector({required this.role, required this.onChanged});
+
+  final String role;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: Resq.surfaceAlt,
+        borderRadius: BorderRadius.circular(Resq.radiusControl),
+      ),
+      child: Row(
+        children: [
+          _Option(
+            label: 'Patient',
+            icon: Icons.person_rounded,
+            selected: role == 'patient',
+            onTap: () => onChanged('patient'),
+          ),
+          _Option(
+            label: 'Driver',
+            icon: Icons.airport_shuttle_rounded,
+            selected: role == 'driver',
+            onTap: () => onChanged('driver'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Option extends StatelessWidget {
+  const _Option({
+    required this.label,
+    required this.icon,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final IconData icon;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          height: 44,
+          decoration: BoxDecoration(
+            color: selected ? Resq.surface : Colors.transparent,
+            borderRadius: BorderRadius.circular(Resq.radiusControl - 2),
+            boxShadow: selected ? Resq.cardShadow : null,
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 17, color: selected ? Resq.brandInk : Resq.inkMuted),
+              const SizedBox(width: Resq.space2),
+              Text(
+                label,
+                style: selected
+                    ? ResqType.bodyStrong(color: Resq.brandInk)
+                    : ResqType.body(color: Resq.inkMuted),
+              ),
+            ],
           ),
         ),
       ),

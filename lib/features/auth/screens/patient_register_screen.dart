@@ -62,7 +62,10 @@ class _PatientRegisterScreenState extends ConsumerState<PatientRegisterScreen> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         foregroundColor: Resq.ink,
-        title: Text('Create Account', style: ResqType.title()),
+        // Named, so a driver who lands here by accident can tell before they
+        // fill it in. Driver and patient accounts are separate, and a driver
+        // with a patient account cannot receive a single dispatch.
+        title: Text('Patient account', style: ResqType.title()),
       ),
       body: SafeArea(
         child: SingleChildScrollView(

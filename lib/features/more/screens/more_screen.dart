@@ -56,7 +56,14 @@ class MoreScreen extends ConsumerWidget {
             icon: Icons.local_shipping_rounded,
             label: isDriver ? 'Driver dashboard' : 'I am a driver',
             subtitle: isDriver ? 'Go on duty' : 'Sign in to receive emergencies',
-            onTap: () => context.push(isDriver ? Routes.driverHome : Routes.login),
+            // The role has to travel with the link. Without it the login screen
+            // opened in patient mode, so driver credentials were checked
+            // against patient accounts and came back "invalid phone or
+            // password" — and its Register link led to the patient form, which
+            // is how a driver ended up with a patient account.
+            onTap: () => context.push(
+              isDriver ? Routes.driverHome : '${Routes.login}?role=driver',
+            ),
           ),
 
           const SizedBox(height: Resq.space6),
