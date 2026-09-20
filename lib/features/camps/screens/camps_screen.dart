@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../core/constants/app_colors.dart';
-import '../../../core/constants/app_text_styles.dart';
+import '../../../core/constants/app_assets.dart';
+import '../../../core/theme/tokens.dart';
+import '../../../core/theme/typography.dart';
 import '../../../core/router/app_router.dart';
+import '../../../core/widgets/offline_banner.dart';
+import '../../../core/widgets/state_views.dart';
 import '../data/models/camp_model.dart';
 import '../providers/camps_provider.dart';
 
@@ -17,44 +20,51 @@ class CampsScreen extends ConsumerWidget {
     final servingCache = ref.watch(campsServingCacheProvider).asData?.value ?? false;
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: Resq.canvas,
       appBar: AppBar(
-        backgroundColor: AppColors.background,
+        backgroundColor: Resq.canvas,
         elevation: 0,
-        title: Text('Nearby Medical Camps', style: AppTextStyles.subtitle),
+        title: Text('Nearby Medical Camps', style: ResqType.section()),
       ),
-      body: RefreshIndicator(
-        color: AppColors.sosRed,
-        backgroundColor: AppColors.surfaceOne,
+      body: Column(
+        children: [
+          const OfflineBanner(
+            message: 'No internet. Camps shown are the ones saved on this phone.',
+          ),
+          Expanded(
+            child: RefreshIndicator(
+        color: Resq.brandInk,
+        backgroundColor: Resq.surface,
         onRefresh: () async => ref.refresh(nearbyCampsProvider.future),
         child: campsAsync.when(
-          loading: () => const Center(child: CircularProgressIndicator(color: AppColors.sosRed)),
+          loading: () => const Center(child: CircularProgressIndicator(color: Resq.critical)),
+          // Kept scrollable so pull-to-refresh still works on a failed load —
+          // an error state you cannot retry from is a dead end.
           error: (e, _) => ListView(
-            padding: const EdgeInsets.all(20),
             children: [
-              const SizedBox(height: 80),
-              Icon(Icons.cloud_off, color: AppColors.textSecondary, size: 48),
-              const SizedBox(height: 12),
-              Text(
-                'Could not load camps.\nPull down to try again.',
-                textAlign: TextAlign.center,
-                style: AppTextStyles.body.copyWith(color: AppColors.textSecondary),
+              SizedBox(
+                height: 420,
+                child: ErrorState(
+                  illustration: AppAssets.stateOffline,
+                  title: 'Could not load camps',
+                  message: 'They need a connection the first time. Pull down to try again.',
+                  onRetry: () => ref.invalidate(nearbyCampsProvider),
+                ),
               ),
             ],
           ),
           data: (camps) {
             if (camps.isEmpty) {
               return ListView(
-                padding: const EdgeInsets.all(20),
-                children: [
-                  const SizedBox(height: 80),
-                  const Icon(Icons.medical_services_outlined,
-                      color: AppColors.textSecondary, size: 48),
-                  const SizedBox(height: 12),
-                  Text(
-                    'No medical camps running near you right now.',
-                    textAlign: TextAlign.center,
-                    style: AppTextStyles.body.copyWith(color: AppColors.textSecondary),
+                children: const [
+                  SizedBox(
+                    height: 420,
+                    child: EmptyState(
+                      illustration: AppAssets.stateNoCamps,
+                      title: 'No camps near you this week',
+                      message: 'Free camps are listed here while they are running, '
+                          'within 25 km of where you are.',
+                    ),
                   ),
                 ],
               );
@@ -72,19 +82,19 @@ class CampsScreen extends ConsumerWidget {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                         decoration: BoxDecoration(
-                          color: AppColors.confirmedGreen.withValues(alpha: 0.12),
+                          color: Resq.ready.withValues(alpha: 0.12),
                           borderRadius: BorderRadius.circular(14),
                         ),
                         child: Row(
                           children: [
                             const Icon(Icons.info_outline,
-                                color: AppColors.confirmedGreen, size: 18),
+                                color: Resq.ready, size: 18),
                             const SizedBox(width: 10),
                             Expanded(
                               child: Text(
                                 'Free health services near you · within 25 km',
-                                style: AppTextStyles.caption
-                                    .copyWith(color: AppColors.confirmedGreen),
+                                style: ResqType.caption()
+                                    .copyWith(color: Resq.ready),
                               ),
                             ),
                           ],
@@ -95,7 +105,7 @@ class CampsScreen extends ConsumerWidget {
                         Text(
                           'Showing saved camps',
                           textAlign: TextAlign.center,
-                          style: AppTextStyles.caption,
+                          style: ResqType.caption(),
                         ),
                       ],
                     ],
@@ -106,6 +116,9 @@ class CampsScreen extends ConsumerWidget {
             );
           },
         ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -126,27 +139,27 @@ class _CampCard extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: AppColors.surfaceOne,
+          color: Resq.surface,
           borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: AppColors.borderGlass),
+          border: Border.all(color: Resq.border),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(camp.name, style: AppTextStyles.subtitle),
+            Text(camp.name, style: ResqType.section()),
             if (camp.organizerName != null) ...[
               const SizedBox(height: 2),
-              Text(camp.organizerName!, style: AppTextStyles.caption),
+              Text(camp.organizerName!, style: ResqType.caption()),
             ],
             const SizedBox(height: 10),
             Row(
               children: [
                 if (camp.distanceText != null)
-                  _chip(camp.distanceText!, AppColors.infoBlue),
+                  _chip(camp.distanceText!, Resq.info),
                 if (camp.daysRemaining != null)
                   _chip(
                     '${camp.daysRemaining} days left',
-                    camp.isEndingSoon ? AppColors.warningAmber : AppColors.textSecondary,
+                    camp.isEndingSoon ? Resq.decision : Resq.inkSoft,
                   ),
               ],
             ),
@@ -160,20 +173,20 @@ class _CampCard extends StatelessWidget {
                         (s) => Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                           decoration: BoxDecoration(
-                            color: AppColors.surfaceTwo,
+                            color: Resq.surfaceAlt,
                             borderRadius: BorderRadius.circular(8),
                           ),
-                          child: Text(s, style: AppTextStyles.caption),
+                          child: Text(s, style: ResqType.caption()),
                         ),
                       ),
                   if (extra > 0)
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
-                        color: AppColors.surfaceTwo,
+                        color: Resq.surfaceAlt,
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child: Text('+$extra more', style: AppTextStyles.caption),
+                      child: Text('+$extra more', style: ResqType.caption()),
                     ),
                 ],
               ),
@@ -182,14 +195,14 @@ class _CampCard extends StatelessWidget {
               const SizedBox(height: 10),
               Row(
                 children: [
-                  const Icon(Icons.place_outlined, size: 14, color: AppColors.textSecondary),
+                  const Icon(Icons.place_outlined, size: 14, color: Resq.inkSoft),
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(
                       camp.address!,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: AppTextStyles.caption,
+                      style: ResqType.caption(),
                     ),
                   ),
                 ],
@@ -208,6 +221,6 @@ class _CampCard extends StatelessWidget {
           color: color.withValues(alpha: 0.15),
           borderRadius: BorderRadius.circular(999),
         ),
-        child: Text(label, style: AppTextStyles.caption.copyWith(color: color)),
+        child: Text(label, style: ResqType.caption().copyWith(color: color)),
       );
 }

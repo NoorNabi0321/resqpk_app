@@ -23,6 +23,12 @@ import '../../features/sos/screens/tracking_screen.dart';
 import '../../features/sos/screens/no_driver_screen.dart';
 import '../../features/ai_report/screens/ai_report_screen.dart';
 import '../../features/ai_report/screens/report_pdf_screen.dart';
+import '../../features/ai_report/screens/flow/report_photo_screen.dart';
+import '../../features/ai_report/screens/flow/report_method_screen.dart';
+import '../../features/ai_report/screens/flow/report_text_screen.dart';
+import '../../features/ai_report/screens/flow/report_voice_screen.dart';
+import '../../features/ai_report/screens/flow/report_generating_screen.dart';
+import '../../features/ai_report/screens/flow/report_result_screen.dart';
 import '../../features/first_aid/screens/first_aid_screen.dart';
 import '../../features/first_aid/screens/guide_detail_screen.dart';
 import '../../features/first_aid/data/models/first_aid_guide_model.dart';
@@ -56,6 +62,14 @@ class Routes {
   static const String noDriver = '/no-driver';
   static const String aiReport = '/ai-report';
   static const String reportPdf = '/ai-report/pdf';
+
+  // The report, one question per screen.
+  static const String reportPhoto = '/report/photo';
+  static const String reportMethod = '/report/method';
+  static const String reportText = '/report/text';
+  static const String reportVoice = '/report/voice';
+  static const String reportGenerating = '/report/generating';
+  static const String reportResult = '/report/result';
 
   // Driver
   static const String driverHome = '/driver-home';
@@ -220,6 +234,31 @@ final appRouter = GoRouter(
     GoRoute(
       path: Routes.aiReport,
       pageBuilder: (c, s) => _page(AIReportScreen(caseId: s.extra as String? ?? '')),
+    ),
+    // --- The report flow ------------------------------------------------------
+    GoRoute(
+      path: Routes.reportPhoto,
+      pageBuilder: (c, s) => _page(ReportPhotoScreen(caseId: s.extra as String? ?? '')),
+    ),
+    GoRoute(
+      path: Routes.reportMethod,
+      pageBuilder: (c, s) => _page(ReportMethodScreen(caseId: s.extra as String? ?? '')),
+    ),
+    GoRoute(
+      path: Routes.reportText,
+      pageBuilder: (c, s) => _page(ReportTextScreen(caseId: s.extra as String? ?? '')),
+    ),
+    GoRoute(
+      path: Routes.reportVoice,
+      pageBuilder: (c, s) => _page(ReportVoiceScreen(caseId: s.extra as String? ?? '')),
+    ),
+    GoRoute(
+      path: Routes.reportGenerating,
+      pageBuilder: (c, s) => _page(ReportGeneratingScreen(caseId: s.extra as String? ?? '')),
+    ),
+    GoRoute(
+      path: Routes.reportResult,
+      pageBuilder: (c, s) => _page(ReportResultScreen(caseId: s.extra as String? ?? '')),
     ),
     GoRoute(
       path: Routes.reportPdf,

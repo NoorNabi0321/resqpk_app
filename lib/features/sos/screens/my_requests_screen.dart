@@ -52,7 +52,7 @@ class _MyRequestsScreenState extends ConsumerState<MyRequestsScreen> {
       setState(() => _opening = false);
 
       if (found.status == 'completed') {
-        context.push(Routes.aiReport, extra: found.caseId);
+        context.push(Routes.reportResult, extra: found.caseId);
       } else if (found.status == 'cancelled') {
         setState(() => _error = 'That request was cancelled.');
       } else {

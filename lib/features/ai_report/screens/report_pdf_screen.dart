@@ -7,8 +7,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
-import '../../../core/constants/app_colors.dart';
-import '../../../core/constants/app_text_styles.dart';
+import '../../../core/theme/tokens.dart';
+import '../../../core/theme/typography.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../sos/providers/session_provider.dart';
 import '../data/ai_report_repository.dart';
@@ -136,23 +136,23 @@ class _ReportPdfScreenState extends ConsumerState<ReportPdfScreen> {
     final ready = _file != null && !_loading;
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: Resq.canvas,
       appBar: AppBar(
-        backgroundColor: AppColors.background,
+        backgroundColor: Resq.canvas,
         elevation: 0,
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Emergency Report', style: AppTextStyles.subtitle),
+            Text('Emergency Report', style: ResqType.section()),
             if (_pages > 0)
-              Text('Page ${_currentPage + 1} of $_pages', style: AppTextStyles.caption),
+              Text('Page ${_currentPage + 1} of $_pages', style: ResqType.caption()),
           ],
         ),
         actions: [
           IconButton(
             tooltip: 'Share report',
             onPressed: ready ? _share : null,
-            icon: const Icon(Icons.share, color: AppColors.infoBlue),
+            icon: const Icon(Icons.share, color: Resq.info),
           ),
           IconButton(
             tooltip: 'Download report',
@@ -161,9 +161,9 @@ class _ReportPdfScreenState extends ConsumerState<ReportPdfScreen> {
                 ? const SizedBox(
                     width: 18,
                     height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.infoBlue),
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Resq.info),
                   )
-                : const Icon(Icons.download, color: AppColors.infoBlue),
+                : const Icon(Icons.download, color: Resq.info),
           ),
           const SizedBox(width: 4),
         ],
@@ -178,7 +178,7 @@ class _ReportPdfScreenState extends ConsumerState<ReportPdfScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            CircularProgressIndicator(color: AppColors.sosRed),
+            CircularProgressIndicator(color: Resq.critical),
             SizedBox(height: 16),
             Text('Preparing your report…'),
           ],
@@ -194,19 +194,19 @@ class _ReportPdfScreenState extends ConsumerState<ReportPdfScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               const Icon(Icons.picture_as_pdf_outlined,
-                  color: AppColors.textSecondary, size: 52),
+                  color: Resq.inkSoft, size: 52),
               const SizedBox(height: 14),
               Text(
                 _error!,
                 textAlign: TextAlign.center,
-                style: AppTextStyles.body.copyWith(color: AppColors.textSecondary),
+                style: ResqType.body().copyWith(color: Resq.inkSoft),
               ),
               const SizedBox(height: 18),
               OutlinedButton.icon(
                 onPressed: _load,
-                icon: const Icon(Icons.refresh, size: 18, color: AppColors.infoBlue),
+                icon: const Icon(Icons.refresh, size: 18, color: Resq.info),
                 label: Text('Try again',
-                    style: AppTextStyles.caption.copyWith(color: AppColors.infoBlue)),
+                    style: ResqType.caption().copyWith(color: Resq.info)),
               ),
             ],
           ),

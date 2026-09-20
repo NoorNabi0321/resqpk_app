@@ -4,8 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../../../core/constants/app_colors.dart';
-import '../../../core/constants/app_text_styles.dart';
+import '../../../core/theme/tokens.dart';
+import '../../../core/theme/typography.dart';
 import '../../../core/map/resqpk_map.dart';
 import '../data/models/camp_model.dart';
 import '../providers/camps_provider.dart';
@@ -40,41 +40,41 @@ class CampDetailScreen extends ConsumerWidget {
 
     if (c == null) {
       return Scaffold(
-        backgroundColor: AppColors.background,
-        appBar: AppBar(backgroundColor: AppColors.background, elevation: 0),
+        backgroundColor: Resq.canvas,
+        appBar: AppBar(backgroundColor: Resq.canvas, elevation: 0),
         body: Center(
-          child: Text('Camp not found', style: AppTextStyles.body),
+          child: Text('Camp not found', style: ResqType.body()),
         ),
       );
     }
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: Resq.canvas,
       appBar: AppBar(
-        backgroundColor: AppColors.background,
+        backgroundColor: Resq.canvas,
         elevation: 0,
-        title: Text('Camp Details', style: AppTextStyles.subtitle),
+        title: Text('Camp Details', style: ResqType.section()),
       ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
         children: [
-          Text(c.name, style: AppTextStyles.title),
+          Text(c.name, style: ResqType.title()),
           if (c.organizerName != null) ...[
             const SizedBox(height: 4),
-            Text(c.organizerName!, style: AppTextStyles.caption),
+            Text(c.organizerName!, style: ResqType.caption()),
           ],
           if (c.startDate != null && c.endDate != null) ...[
             const SizedBox(height: 10),
             Row(
               children: [
-                const Icon(Icons.event, size: 15, color: AppColors.confirmedGreen),
+                const Icon(Icons.event, size: 15, color: Resq.ready),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     '${c.startDate} → ${c.endDate}'
                     '${c.daysRemaining != null ? '  ·  ${c.daysRemaining} days left' : ''}',
-                    style: AppTextStyles.caption.copyWith(
-                      color: c.isEndingSoon ? AppColors.warningAmber : AppColors.textSecondary,
+                    style: ResqType.caption().copyWith(
+                      color: c.isEndingSoon ? Resq.decision : Resq.inkSoft,
                     ),
                   ),
                 ),
@@ -84,12 +84,12 @@ class CampDetailScreen extends ConsumerWidget {
 
           if (c.description != null && c.description!.isNotEmpty) ...[
             const SizedBox(height: 18),
-            Text(c.description!, style: AppTextStyles.body),
+            Text(c.description!, style: ResqType.body()),
           ],
 
           if (c.servicesOffered.isNotEmpty) ...[
             const SizedBox(height: 20),
-            Text('Services offered', style: AppTextStyles.subtitle),
+            Text('Services offered', style: ResqType.section()),
             const SizedBox(height: 10),
             Wrap(
               spacing: 8,
@@ -99,12 +99,12 @@ class CampDetailScreen extends ConsumerWidget {
                     (s) => Container(
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
                       decoration: BoxDecoration(
-                        color: AppColors.confirmedGreen.withValues(alpha: 0.14),
+                        color: Resq.ready.withValues(alpha: 0.14),
                         borderRadius: BorderRadius.circular(999),
                       ),
                       child: Text(
                         s,
-                        style: AppTextStyles.caption.copyWith(color: AppColors.confirmedGreen),
+                        style: ResqType.caption().copyWith(color: Resq.ready),
                       ),
                     ),
                   )
@@ -135,7 +135,7 @@ class CampDetailScreen extends ConsumerWidget {
                         height: MapSpec.pinHeight,
                         alignment: Alignment.topCenter,
                         child: const MapDestinationPin(
-                          color: AppColors.confirmedGreen,
+                          color: Resq.ready,
                           icon: Icons.medical_services,
                         ),
                       ),
@@ -148,7 +148,7 @@ class CampDetailScreen extends ConsumerWidget {
 
           if (c.address != null) ...[
             const SizedBox(height: 10),
-            Text(c.address!, style: AppTextStyles.caption),
+            Text(c.address!, style: ResqType.caption()),
           ],
 
           const SizedBox(height: 20),
@@ -158,14 +158,14 @@ class CampDetailScreen extends ConsumerWidget {
                 Expanded(
                   child: OutlinedButton.icon(
                     onPressed: () => _call(context, c.contactPhone),
-                    icon: const Icon(Icons.phone, size: 18, color: AppColors.confirmedGreen),
+                    icon: const Icon(Icons.phone, size: 18, color: Resq.ready),
                     label: Text(
                       'Call Camp',
-                      style: AppTextStyles.caption.copyWith(color: AppColors.confirmedGreen),
+                      style: ResqType.caption().copyWith(color: Resq.ready),
                     ),
                     style: OutlinedButton.styleFrom(
                       minimumSize: const Size(0, 48),
-                      side: const BorderSide(color: AppColors.confirmedGreen),
+                      side: const BorderSide(color: Resq.ready),
                     ),
                   ),
                 ),
@@ -175,9 +175,9 @@ class CampDetailScreen extends ConsumerWidget {
                 child: ElevatedButton.icon(
                   onPressed: () => _directions(c),
                   icon: const Icon(Icons.navigation_outlined, size: 18, color: Colors.white),
-                  label: Text('Directions', style: AppTextStyles.buttonLabel.copyWith(fontSize: 14)),
+                  label: Text('Directions', style: ResqType.button().copyWith(fontSize: 14)),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.infoBlue,
+                    backgroundColor: Resq.info,
                     minimumSize: const Size(0, 48),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
@@ -190,17 +190,17 @@ class CampDetailScreen extends ConsumerWidget {
           Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: AppColors.surfaceTwo,
+              color: Resq.surfaceAlt,
               borderRadius: BorderRadius.circular(14),
             ),
             child: Row(
               children: [
-                const Icon(Icons.info_outline, size: 16, color: AppColors.textSecondary),
+                const Icon(Icons.info_outline, size: 16, color: Resq.inkSoft),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
                     'Medical camps offer free basic services. For emergencies always use SOS.',
-                    style: AppTextStyles.caption,
+                    style: ResqType.caption(),
                   ),
                 ),
               ],

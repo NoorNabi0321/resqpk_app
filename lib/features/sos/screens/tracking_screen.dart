@@ -458,10 +458,13 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
   void _openReport(String caseId) {
     final existing = _latestReport ?? ref.read(aiReportProvider).report;
     if (existing != null && existing.isComplete) {
-      context.push(Routes.reportPdf, extra: {'caseId': caseId, 'report': existing});
-    } else {
-      context.push(Routes.aiReport, extra: caseId);
+      context.push(Routes.reportResult, extra: caseId);
+      return;
     }
+    // Nothing recorded yet — start the flow at its first question, with no
+    // leftovers from a previous case.
+    ref.read(aiReportProvider.notifier).startFresh();
+    context.push(Routes.reportPhoto, extra: caseId);
   }
 
   @override

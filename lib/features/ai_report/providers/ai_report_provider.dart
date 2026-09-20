@@ -171,6 +171,32 @@ class AIReportNotifier extends StateNotifier<AIReportState> {
     state = state.copyWith(selectedImages: list);
   }
 
+  /// The report flow takes one photo, not a gallery: a single clear picture of
+  /// the patient is what the doctor reading this actually uses, and choosing
+  /// four of them is not a job for someone standing over a casualty.
+  void setPhoto(String path) => state = state.copyWith(selectedImages: [path]);
+
+  void clearPhoto() => state = state.copyWith(selectedImages: const []);
+
+  Future<void> pickPhotoFromGallery() async {
+    try {
+      final picked = await ImagePicker().pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 70,
+        maxWidth: 1600,
+      );
+      if (picked != null) setPhoto(picked.path);
+    } catch (e) {
+      state = state.copyWith(error: 'Could not open the gallery: $e');
+    }
+  }
+
+  /// Starts a new report, keeping nothing from the last one.
+  void startFresh() {
+    _durationTimer?.cancel();
+    state = const AIReportState();
+  }
+
   void setTextInput(String text) => state = state.copyWith(textInput: text);
 
   void setLanguage(String language) => state = state.copyWith(selectedLanguage: language);

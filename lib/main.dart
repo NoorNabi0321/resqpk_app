@@ -40,10 +40,10 @@ class ResQPKApp extends StatelessWidget {
     return MaterialApp.router(
       title: 'ResQPK',
       debugShowCheckedModeBanner: false,
-      // Dark for now, because most screens still hand-style dark surfaces.
-      // Patient screens move to ResqTheme.light one at a time; the driver app
-      // keeps this one for good — see Plan 3 §2.2.
-      theme: ResqTheme.dark,
+      // Light, now that every patient screen is on the warm palette. The driver
+      // screens wrap themselves in ResqTheme.dark — see DriverScaffold — so
+      // their sheets and dialogs stay dark for someone driving at night.
+      theme: ResqTheme.light,
       routerConfig: appRouter,
     );
   }

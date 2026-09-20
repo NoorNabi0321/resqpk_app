@@ -116,6 +116,19 @@ class AIReportRepository {
     }
   }
 
+  /// POST /api/ai/report/:caseId/send — push the report at the hospital again.
+  ///
+  /// The pipeline sends it automatically the moment it is ready, so this is for
+  /// the case where staff say they cannot see it: one tap, and it lands in the
+  /// dashboard again rather than being re-dictated over a phone.
+  Future<void> sendReportToHospital(String caseId, {String? caseToken}) async {
+    try {
+      await apiClient.post('/api/ai/report/$caseId/send', caseToken: caseToken);
+    } catch (e) {
+      throw Exception(_err(e));
+    }
+  }
+
   /// Downloads the PDF to a local file so it can be rendered, shared, or saved.
   ///
   /// Uses a bare Dio client on purpose: the shared apiClient has an interceptor
