@@ -42,17 +42,62 @@ class LocationService {
   Position? get lastPosition => _lastPosition;
   bool get isTracking => _isTracking;
 
-  Future<bool> requestPermissions() async {
-    LocationPermission permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
-    }
-    if (permission == LocationPermission.deniedForever) return false;
-    return permission == LocationPermission.always ||
-        permission == LocationPermission.whileInUse;
+  /// In-flight requests, shared between callers.
+  ///
+  /// The home screen opens five location-dependent things at once — the
+  /// location strip, the map, the hospital list, the camps list and the
+  /// background GPS writer. Android only shows one permission dialog, and
+  /// geolocator does not reliably answer the duplicate requests queued behind
+  /// it: they can sit unresolved for the life of the screen. That is what left
+  /// "Emergency hospitals" and "Free medical camps" shimmering forever while
+  /// the map above them showed the user's position perfectly well.
+  ///
+  /// One request, one answer, handed to everyone who asked.
+  Future<bool>? _pendingPermission;
+  Future<Position?>? _pendingPosition;
+
+  Future<bool> requestPermissions() {
+    final pending = _pendingPermission;
+    if (pending != null) return pending;
+
+    final request = _requestPermissionsOnce();
+    _pendingPermission = request;
+    request.whenComplete(() {
+      if (identical(_pendingPermission, request)) _pendingPermission = null;
+    });
+    return request;
   }
 
-  Future<Position?> getCurrentPosition() async {
+  Future<bool> _requestPermissionsOnce() async {
+    try {
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.deniedForever) return false;
+      return permission == LocationPermission.always ||
+          permission == LocationPermission.whileInUse;
+    } catch (e) {
+      // A request already in progress elsewhere, or a platform error. Treat it
+      // as "not now" rather than letting it propagate into a hung provider.
+      debugPrint('Location permission request failed: $e');
+      return false;
+    }
+  }
+
+  Future<Position?> getCurrentPosition() {
+    final pending = _pendingPosition;
+    if (pending != null) return pending;
+
+    final request = _getCurrentPositionOnce();
+    _pendingPosition = request;
+    request.whenComplete(() {
+      if (identical(_pendingPosition, request)) _pendingPosition = null;
+    });
+    return request;
+  }
+
+  Future<Position?> _getCurrentPositionOnce() async {
     // Ensure permission is granted first (this triggers the runtime dialog).
     final hasPermission = await requestPermissions();
     if (!hasPermission) return null;
@@ -66,8 +111,12 @@ class LocationService {
       return position;
     } catch (_) {
       // Couldn't get a fresh fix — fall back to the OS's last-known position.
-      final lastKnown = await Geolocator.getLastKnownPosition();
-      if (lastKnown != null) _lastPosition = _normalize(lastKnown);
+      try {
+        final lastKnown = await Geolocator.getLastKnownPosition();
+        if (lastKnown != null) _lastPosition = _normalize(lastKnown);
+      } catch (_) {
+        // Nothing to fall back to; callers handle a null position.
+      }
       return _lastPosition;
     }
   }

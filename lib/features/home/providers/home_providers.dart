@@ -7,17 +7,20 @@ import '../../sos/data/sos_repository.dart';
 /// Nearby emergency-capable hospitals for the home screen list.
 final nearbyHospitalsProvider =
     FutureProvider<List<Map<String, dynamic>>>((ref) async {
-  final locationService = ref.read(locationServiceProvider);
-  final position = locationService.lastPosition ?? await locationService.getCurrentPosition();
+  final position = await resolvePosition(ref);
   if (position == null) return [];
-  return SOSRepository().getNearbyHospitals(position.latitude, position.longitude);
+  return SOSRepository().getNearbyHospitals(position.lat, position.lng);
 });
 
 /// Human-readable address for the location banner ("Bohri Bazar, Hyderabad").
 /// Falls back to coordinates when reverse geocoding is unavailable offline.
 final currentAddressProvider = FutureProvider<String>((ref) async {
   final locationService = ref.read(locationServiceProvider);
-  final position = locationService.lastPosition ?? await locationService.getCurrentPosition();
+  final position = locationService.lastPosition ??
+      await locationService.getCurrentPosition().timeout(
+            const Duration(seconds: 12),
+            onTimeout: () => null,
+          );
   if (position == null) return 'Locating…';
 
   try {

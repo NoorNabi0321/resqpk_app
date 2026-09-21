@@ -72,16 +72,26 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
 
   Future<void> _warmLocation() async {
     final locationService = ref.read(locationServiceProvider);
+    Position? position;
     try {
-      await locationService.getCurrentPosition();
+      position = await locationService.getCurrentPosition();
       await locationService.startTracking();
     } catch (_) {
       // The SOS trigger surfaces location errors when the user actually needs help.
     }
-    if (mounted) {
-      ref.invalidate(locationAccessProvider);
-      setState(() {});
+    if (!mounted) return;
+
+    ref.invalidate(locationAccessProvider);
+
+    // The lists run before the first fix exists and correctly come back empty.
+    // Once there is a position, ask them again — otherwise "no hospitals near
+    // you" would stand until the user thought to pull down.
+    if (position != null) {
+      ref.invalidate(nearbyHospitalsProvider);
+      ref.invalidate(nearbyCampsProvider);
+      ref.invalidate(currentAddressProvider);
     }
+    setState(() {});
   }
 
   @override
