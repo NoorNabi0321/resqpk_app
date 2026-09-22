@@ -7,7 +7,7 @@ import '../../../core/theme/typography.dart';
 import '../../../core/router/app_router.dart';
 import '../../../core/utils/validators.dart';
 import '../../../core/widgets/glass_text_field.dart';
-import '../../../core/widgets/primary_button.dart';
+import '../../../core/widgets/primary_button.dart' show PrimaryButton, SecondaryButton;
 import '../providers/auth_provider.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
@@ -116,15 +116,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 const SizedBox(height: 24),
                 PrimaryButton(label: 'Login', loading: loading, onPressed: _submit),
                 const SizedBox(height: 8),
-                TextButton(
-                  onPressed: () => context.go(
-                      _role == 'driver' ? Routes.driverRegister : Routes.patientRegister),
-                  child: Text(
-                    _role == 'driver'
-                        ? 'New driver? Register your ambulance'
-                        : "Don't have an account? Register",
-                    style: ResqType.caption().copyWith(color: Resq.info),
-                  ),
+                const SizedBox(height: Resq.space5),
+                // Sign-up is one button that asks which kind of account, rather
+                // than a screen of role buttons in front of the login form.
+                SecondaryButton(
+                  label: 'Sign up',
+                  icon: Icons.person_add_alt_rounded,
+                  onPressed: () => context.push(Routes.signupChoice),
                 ),
               ],
             ),

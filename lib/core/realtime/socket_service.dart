@@ -6,6 +6,13 @@ import '../constants/api_constants.dart';
 import '../storage/secure_storage.dart';
 import 'socket_events.dart';
 
+/// Where the live connection actually is.
+///
+/// "Connecting" and "cannot connect" used to look identical on screen, so a
+/// driver whose socket never opened waited on a spinner that was never going
+/// to resolve. These are the states worth telling someone apart.
+enum SocketStatus { idle, connecting, connected, authenticated, failed }
+
 /// Wraps the Socket.io client: connection lifecycle, typed emit helpers, and
 /// broadcast streams that widgets/providers listen to.
 class SocketService {
@@ -47,6 +54,31 @@ class SocketService {
   /// `isConnected` in build() captures the value once and never updates.
   final StreamController<bool> _readyController = StreamController<bool>.broadcast();
 
+  final StreamController<SocketStatus> _statusController =
+      StreamController<SocketStatus>.broadcast();
+
+  SocketStatus _status = SocketStatus.idle;
+  String? _lastError;
+
+  SocketStatus get status => _status;
+
+  /// Why the last attempt failed, in words a driver can act on.
+  String? get lastError => _lastError;
+
+  /// Current status first, then every change.
+  Stream<SocketStatus> get statusStream async* {
+    yield _status;
+    yield* _statusController.stream;
+  }
+
+  void _setStatus(SocketStatus status, {String? error}) {
+    _status = status;
+    _lastError = error;
+    if (!_statusController.isClosed) _statusController.add(status);
+  }
+
+  void _fail(String reason) => _setStatus(SocketStatus.failed, error: reason);
+
   /// Current readiness first, then every change — so a late subscriber still
   /// starts from the right value.
   Stream<bool> get readyStream async* {
@@ -81,11 +113,29 @@ class SocketService {
   /// case token, which authenticates the socket for exactly one case. The
   /// server places such a connection in that case's room and registers no role
   /// handlers for it.
+  ///
+  /// Never throws. A connection that cannot be made is reported through
+  /// [statusStream] and [lastError] instead: this is watched by a provider, and
+  /// a thrown exception there is swallowed into a provider error nobody reads —
+  /// which is how a driver came to sit on "Connecting…" with no idea why.
   Future<void> connect({String? userId, String? caseToken}) async {
-    final token = caseToken ?? await SecureStorage.getToken();
-    if (token == null || token.isEmpty) {
-      throw Exception('No credentials to connect with');
+    String? token;
+    try {
+      token = caseToken ?? await SecureStorage.getToken();
+    } catch (e) {
+      // Secure storage can fail to read back after a reinstall (the Android
+      // keystore entry no longer decrypts). Say so rather than hanging.
+      _fail('Could not read your sign-in. Please sign in again.');
+      debugPrint('Socket token read failed: $e');
+      return;
     }
+
+    if (token == null || token.isEmpty) {
+      _fail('You are signed out. Please sign in again.');
+      return;
+    }
+
+    _setStatus(SocketStatus.connecting);
 
     // Tear down any previous socket (e.g. after switching accounts) so we don't
     // keep a stale session authenticated as the wrong user/role.
@@ -104,6 +154,10 @@ class SocketService {
           // then never connect at all.
           .setTransports(['websocket', 'polling'])
           .enableAutoConnect()
+          // A fresh manager every time. socket_io_client keeps a global cache
+          // keyed by URL, and reconnecting after a dispose can otherwise hand
+          // back a socket attached to a torn-down manager that never opens.
+          .enableForceNew()
           .setAuth({'token': token})
           .setReconnectionAttempts(10)
           .setReconnectionDelay(2000)
@@ -114,30 +168,47 @@ class SocketService {
 
     socket.onConnect((_) {
       _isConnected = true;
+      _setStatus(SocketStatus.connected);
       debugPrint('Socket connected: ${socket.id}');
     });
     socket.on(SocketEvents.authenticated, (data) {
       // The server registers role handlers only after authenticating, so this
       // is the first moment an emitWithAck can actually be answered.
       _connectedRole = _asMap(data)['role']?.toString();
+      _setStatus(SocketStatus.authenticated);
       _setReady(true);
       if (!(_readyCompleter?.isCompleted ?? true)) _readyCompleter!.complete();
       debugPrint('Socket authenticated as $_connectedRole: $data');
     });
     socket.on(SocketEvents.authError, (err) {
       _setReady(false);
+      _fail('The server rejected this sign-in. Please sign in again.');
       debugPrint('Socket auth error: $err');
     });
     socket.onDisconnect((_) {
       _isConnected = false;
       _setReady(false);
+      // Socket.io retries on its own; say "connecting" rather than "failed"
+      // unless the attempts run out.
+      if (_status != SocketStatus.failed) _setStatus(SocketStatus.connecting);
       // Socket.io reconnects on its own and re-authenticates; give callers a
       // fresh completer to wait on, otherwise waitUntilReady() would see the
       // old completed one and give up instantly mid-reconnect.
       if (_readyCompleter?.isCompleted ?? true) _readyCompleter = Completer<void>();
       debugPrint('Socket disconnected');
     });
-    socket.onConnectError((err) => debugPrint('Socket connect error: $err'));
+    // The reason the connection could not be made, kept for the UI. Socket.io
+    // keeps retrying underneath, so this is a status line rather than a
+    // verdict — but it must be visible, because "no route to the server" and
+    // "the server rejected you" need completely different actions.
+    socket.onConnectError((err) {
+      _setStatus(SocketStatus.connecting, error: _readableError(err));
+      debugPrint('Socket connect error: $err');
+    });
+    socket.onConnectTimeout((_) {
+      _setStatus(SocketStatus.connecting, error: 'The server did not answer in time.');
+    });
+    socket.onError((err) => debugPrint('Socket error: $err'));
 
     // Incoming driver location (patient/dashboard listening).
     socket.on(SocketEvents.driverLocationBroadcast, (data) {
@@ -183,6 +254,25 @@ class SocketService {
     return {'value': data};
   }
 
+  /// Turns socket.io's error object into something a driver can act on.
+  String _readableError(dynamic err) {
+    final text = err is Map ? (err['message'] ?? err).toString() : err.toString();
+    final lower = text.toLowerCase();
+    if (lower.contains('token') || lower.contains('auth')) {
+      return 'The server rejected this sign-in. Please sign in again.';
+    }
+    if (lower.contains('timeout') || lower.contains('timed out')) {
+      return 'The server did not answer in time. It may be waking up.';
+    }
+    if (lower.contains('socketexception') ||
+        lower.contains('failed host lookup') ||
+        lower.contains('network') ||
+        lower.contains('refused')) {
+      return 'Cannot reach the server. Check your internet.';
+    }
+    return text.length > 90 ? '${text.substring(0, 90)}…' : text;
+  }
+
   void disconnect() {
     _socket?.dispose();
     _socket = null;
@@ -192,6 +282,7 @@ class SocketService {
     _connectedRole = null;
     _readyCompleter = null;
     _setReady(false);
+    _setStatus(SocketStatus.idle);
   }
 
   // --- Driver emits ---------------------------------------------------------
@@ -302,5 +393,6 @@ class SocketService {
     disconnect();
     _socket?.dispose();
     _readyController.close();
+    _statusController.close();
   }
 }

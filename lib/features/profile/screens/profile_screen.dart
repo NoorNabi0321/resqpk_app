@@ -66,7 +66,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             onPressed: () async {
               Navigator.pop(d);
               await ref.read(authProvider.notifier).logout();
-              if (mounted) context.go(Routes.roleSelect);
+              if (mounted) context.go(Routes.home);
             },
             child: Text('Log out', style: ResqType.body().copyWith(color: Resq.critical)),
           ),

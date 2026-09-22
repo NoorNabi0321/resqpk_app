@@ -74,7 +74,7 @@ class MoreScreen extends ConsumerWidget {
             TextButton(
               onPressed: () async {
                 await ref.read(authProvider.notifier).logout();
-                if (context.mounted) context.go(Routes.roleSelect);
+                if (context.mounted) context.go(Routes.home);
               },
               child: Text('Sign out', style: ResqType.button(color: Resq.critical)),
             ),

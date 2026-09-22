@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/connectivity/connectivity_provider.dart';
 import '../../../core/location/location_provider.dart';
 import '../../../core/realtime/realtime_provider.dart';
+import '../../../core/realtime/socket_service.dart';
 import '../../../core/router/app_router.dart';
 import '../../../core/theme/tokens.dart';
 import '../../../core/theme/typography.dart';
@@ -68,7 +69,7 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
       await ref.read(driverOnlineProvider.notifier).goOffline();
     }
     await ref.read(authProvider.notifier).logout();
-    if (mounted) context.go(Routes.roleSelect);
+    if (mounted) context.go('${Routes.login}?role=driver');
   }
 
   @override
@@ -92,6 +93,9 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
       }
     });
 
+    final socket = ref.read(socketServiceProvider);
+    final socketStatus = ref.watch(socketStatusProvider).value ?? socket.status;
+
     final driverState = ref.watch(driverOnlineProvider);
     // Must be a reactive source. Reading socketServiceProvider's .isConnected
     // captured `false` at first build and never rebuilt, which left this screen
@@ -111,7 +115,13 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
     return ExitGuard(
       child: DriverScaffold(
         title: user?.fullName ?? 'Driver',
-        subtitle: isConnected ? 'Connected to ResQPK' : 'Not connected',
+        subtitle: switch (socketStatus) {
+          SocketStatus.authenticated => 'Connected to ResQPK',
+          SocketStatus.connected => 'Signing in to dispatch…',
+          SocketStatus.connecting => 'Connecting…',
+          SocketStatus.failed => socket.lastError ?? 'Not connected',
+          SocketStatus.idle => 'Not connected',
+        },
         actions: [
           DriverRoundButton(
             icon: Icons.logout_rounded,
@@ -130,6 +140,18 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
                 const _Warning(
                   icon: Icons.wifi_off_rounded,
                   text: 'No internet. Location updates pause and resume on their own.',
+                ),
+              // A connection that is going nowhere has to say so, and be
+              // retryable from here. Waiting on a spinner that will never
+              // resolve is the worst thing this screen can do to a driver.
+              if (!isConnected && hasInternet)
+                _ConnectionTrouble(
+                  status: socketStatus,
+                  reason: socket.lastError,
+                  onRetry: () {
+                    socket.disconnect();
+                    ref.invalidate(socketConnectionProvider);
+                  },
                 ),
               DutyToggle(
                 state: duty,
@@ -310,6 +332,70 @@ class _NavCard extends StatelessWidget {
             ),
           ),
           const Icon(Icons.chevron_right_rounded, color: ResqDark.inkFaint),
+        ],
+      ),
+    );
+  }
+}
+
+/// Shown while the socket is not up: what is happening, and a way to push it.
+class _ConnectionTrouble extends StatelessWidget {
+  const _ConnectionTrouble({
+    required this.status,
+    required this.reason,
+    required this.onRetry,
+  });
+
+  final SocketStatus status;
+  final String? reason;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final failed = status == SocketStatus.failed;
+    final color = failed ? Resq.critical : Resq.decision;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: Resq.space3),
+      padding: const EdgeInsets.all(Resq.space3),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(Resq.radiusControl),
+        border: Border.all(color: color.withValues(alpha: 0.4)),
+      ),
+      child: Row(
+        children: [
+          if (failed)
+            Icon(Icons.error_outline_rounded, size: 18, color: color)
+          else
+            SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(strokeWidth: 2, color: color),
+            ),
+          const SizedBox(width: Resq.space3),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  failed ? 'Not connected to dispatch' : 'Connecting to dispatch…',
+                  style: ResqType.bodyStrong(color: color),
+                ),
+                if (reason != null)
+                  Text(reason!, style: ResqType.caption(color: ResqDark.inkMuted)),
+                if (reason == null && !failed)
+                  Text(
+                    'You will not be offered emergencies until this finishes.',
+                    style: ResqType.caption(color: ResqDark.inkMuted),
+                  ),
+              ],
+            ),
+          ),
+          TextButton(
+            onPressed: onRetry,
+            child: Text('Retry', style: ResqType.button(color: color)),
+          ),
         ],
       ),
     );

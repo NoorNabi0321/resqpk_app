@@ -7,7 +7,7 @@ import '../storage/secure_storage.dart';
 import 'app_shell.dart';
 import '../../features/auth/screens/splash_screen.dart';
 import '../../features/auth/screens/onboarding_screen.dart';
-import '../../features/auth/screens/role_select_screen.dart';
+import '../../features/auth/screens/signup_choice_screen.dart';
 import '../../features/auth/screens/patient_register_screen.dart';
 import '../../features/auth/screens/driver_register_screen.dart';
 import '../../features/auth/screens/login_screen.dart';
@@ -43,7 +43,9 @@ class Routes {
   Routes._();
   static const String splash = '/';
   static const String onboarding = '/onboarding';
-  static const String roleSelect = '/role-select';
+  /// Which kind of account to create. Reached from the login screen's Sign up
+  /// button — there is no role screen in front of the app any more.
+  static const String signupChoice = '/signup';
   static const String patientRegister = '/register/patient';
   static const String driverRegister = '/register/driver';
   static const String login = '/login';
@@ -149,7 +151,8 @@ final appRouter = GoRouter(
     final loc = state.matchedLocation;
 
     if (!loggedIn && _guardedRoutes.contains(loc)) {
-      return Routes.roleSelect;
+      // Straight to sign-in, in the right mode for where they were heading.
+      return loc.startsWith('/driver') ? '${Routes.login}?role=driver' : Routes.login;
     }
 
     if (loggedIn &&
@@ -206,7 +209,7 @@ final appRouter = GoRouter(
     // --- Entry ---------------------------------------------------------------
     GoRoute(path: Routes.splash, pageBuilder: (c, s) => _page(const SplashScreen())),
     GoRoute(path: Routes.onboarding, pageBuilder: (c, s) => _page(const OnboardingScreen())),
-    GoRoute(path: Routes.roleSelect, pageBuilder: (c, s) => _page(const RoleSelectScreen())),
+    GoRoute(path: Routes.signupChoice, pageBuilder: (c, s) => _page(const SignupChoiceScreen())),
     GoRoute(path: Routes.login, pageBuilder: (c, s) => _page(const LoginScreen())),
     GoRoute(
       path: Routes.patientRegister,

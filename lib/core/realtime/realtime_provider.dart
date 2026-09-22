@@ -15,10 +15,16 @@ final socketServiceProvider = Provider<SocketService>((ref) {
 /// carries the current user's token/role, not a lingering previous session.
 final socketConnectionProvider = FutureProvider<void>((ref) async {
   final authState = ref.watch(authProvider);
-  final session = ref.watch(sessionProvider);
   final socketService = ref.read(socketServiceProvider);
 
   if (!authState.isAuthenticated) {
+    // Watched only on this branch. A signed-in driver does not care about the
+    // anonymous session, and watching it re-ran this provider when the session
+    // finished loading from Hive — which could land in the middle of the
+    // handshake and tear down a socket that was still opening. That is a
+    // driver stuck on "Connecting…" with a healthy server.
+    final session = ref.watch(sessionProvider);
+
     // A patient with no account still needs live updates. Their case token is
     // the credential, and it is good for that one case only.
     if (session.hasActiveCase) {
@@ -45,7 +51,12 @@ final socketConnectionProvider = FutureProvider<void>((ref) async {
       socketService.connectedRole != null &&
       socketService.connectedRole != role;
 
-  if (staleUser || staleRole) {
+  // An attempt already under way for this same user is not stale — restarting
+  // it just moves the finish line.
+  final alreadyConnecting = socketService.status == SocketStatus.connecting &&
+      socketService.connectedUserId == userId;
+
+  if ((staleUser || staleRole) && !alreadyConnecting) {
     socketService.disconnect();
     await socketService.connect(userId: userId);
   }
@@ -56,6 +67,11 @@ final socketConnectionProvider = FutureProvider<void>((ref) async {
 /// fields in place rather than producing a new value.
 final socketReadyProvider = StreamProvider<bool>((ref) {
   return ref.read(socketServiceProvider).readyStream;
+});
+
+/// Where the connection actually is, and why it is not further along.
+final socketStatusProvider = StreamProvider<SocketStatus>((ref) {
+  return ref.read(socketServiceProvider).statusStream;
 });
 
 final driverLocationStreamProvider = StreamProvider<Map<String, dynamic>>((ref) {
