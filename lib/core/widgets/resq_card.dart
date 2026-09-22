@@ -21,8 +21,10 @@ class ResqCard extends StatelessWidget {
   final EdgeInsets padding;
   final VoidCallback? onTap;
 
-  /// A 3px leading stripe — used sparingly, for urgency on a hospital card.
+  /// A leading stripe — used sparingly, for urgency on a hospital card.
   final Color? accent;
+
+  static const double _accentWidth = 3;
 
   @override
   Widget build(BuildContext context) {
@@ -34,11 +36,27 @@ class ResqCard extends StatelessWidget {
         boxShadow: Resq.cardShadow,
       ),
       clipBehavior: Clip.antiAlias,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+      // Stack, not a Row with CrossAxisAlignment.stretch. Stretch asks every
+      // child to fill the cross axis — which inside a ListView or a scrolling
+      // Column is infinite, and that assertion takes the whole card out of the
+      // layout. In a release build a failed widget paints as an empty box, so
+      // the card simply vanishes instead of complaining.
+      child: Stack(
         children: [
-          if (accent != null) Container(width: 3, color: accent),
-          Expanded(child: Padding(padding: padding, child: child)),
+          Padding(
+            padding: accent == null
+                ? padding
+                : padding.copyWith(left: padding.left + _accentWidth),
+            child: child,
+          ),
+          if (accent != null)
+            Positioned(
+              left: 0,
+              top: 0,
+              bottom: 0,
+              width: _accentWidth,
+              child: ColoredBox(color: accent!),
+            ),
         ],
       ),
     );

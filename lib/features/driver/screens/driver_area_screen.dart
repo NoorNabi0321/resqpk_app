@@ -73,8 +73,8 @@ class _DriverAreaScreenState extends ConsumerState<DriverAreaScreen> {
               mapController: _controller,
               options: MapOptions(initialCenter: me, initialZoom: MapSpec.cityZoom),
               children: [
-                // Dark tiles: this screen is read at night, from a dashboard.
-                const ResQPKTileLayer(),
+                // Light tiles, like every other map in the app.
+                const ResQPKTileLayer(light: true),
                 MarkerLayer(
                   markers: [
                     for (final h in hospitalList)
@@ -132,14 +132,14 @@ class _DriverAreaScreenState extends ConsumerState<DriverAreaScreen> {
                 child: Text(
                   'Could not load hospitals. Pull down on the duty screen to retry.',
                   textAlign: TextAlign.center,
-                  style: ResqType.body(color: ResqDark.inkMuted),
+                  style: ResqType.body(color: Resq.inkMuted),
                 ),
               ),
               data: (list) => list.isEmpty
                   ? Center(
                       child: Text(
                         'No emergency hospital found near this position.',
-                        style: ResqType.body(color: ResqDark.inkMuted),
+                        style: ResqType.body(color: Resq.inkMuted),
                       ),
                     )
                   : ListView.separated(
@@ -185,7 +185,7 @@ class _HospitalRow extends StatelessWidget {
                   hospital['name']?.toString() ?? 'Hospital',
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: ResqType.bodyStrong(color: ResqDark.ink),
+                  style: ResqType.bodyStrong(color: Resq.ink),
                 ),
                 const SizedBox(height: 2),
                 Text(
@@ -196,7 +196,7 @@ class _HospitalRow extends StatelessWidget {
                   ].join(' · '),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: ResqType.caption(color: ResqDark.inkMuted),
+                  style: ResqType.caption(color: Resq.inkMuted),
                 ),
               ],
             ),
@@ -233,7 +233,7 @@ class _LegendDot extends StatelessWidget {
           decoration: BoxDecoration(color: color, shape: BoxShape.circle),
         ),
         const SizedBox(width: 6),
-        Text(label, style: ResqType.micro(color: ResqDark.inkMuted)),
+        Text(label, style: ResqType.micro(color: Resq.inkMuted)),
       ],
     );
   }

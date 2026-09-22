@@ -1,15 +1,16 @@
 import 'package:flutter/material.dart';
 
-import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/tokens.dart';
 import '../../../core/theme/typography.dart';
 
 /// Page chrome for every driver screen.
 ///
-/// Drivers work at night with the phone mounted on a dashboard, so their half
-/// of the app is dark — a white screen at 2am is genuinely dangerous, and it
-/// reflects off a windscreen. The accent colours are the same ones the patient
-/// app uses: an ambulance is the same blue on both sides of the system.
+/// The same warm page the patient app is written on.
+///
+/// The driver side ran dark for a while — the argument being a phone mounted
+/// in a cab at night — but one product reading as one product wins: a driver
+/// and a patient looking at the same case now see the same colours meaning the
+/// same things, and there is one palette to maintain instead of two.
 class DriverScaffold extends StatelessWidget {
   const DriverScaffold({
     super.key,
@@ -32,73 +33,67 @@ class DriverScaffold extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Wrapped rather than inherited: dialogs and sheets opened from a driver
-    // screen read the ambient theme, and a white sheet over a dark map is the
-    // flash of light this whole palette exists to avoid.
-    return Theme(
-      data: ResqTheme.dark,
-      child: Scaffold(
-        backgroundColor: ResqDark.canvas,
-        bottomNavigationBar: bottomBar,
-        body: SafeArea(
-          bottom: false,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  Resq.space3,
-                  Resq.space2,
-                  Resq.space4,
-                  Resq.space3,
-                ),
-                child: Row(
-                  children: [
-                    if (onBack != null)
-                      IconButton(
-                        onPressed: onBack,
-                        icon: const Icon(Icons.arrow_back_rounded, color: ResqDark.ink),
-                        constraints: const BoxConstraints(
-                          minWidth: Resq.tapTarget,
-                          minHeight: Resq.tapTarget,
+    return Scaffold(
+      backgroundColor: Resq.canvas,
+      bottomNavigationBar: bottomBar,
+      body: SafeArea(
+        bottom: false,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                Resq.space3,
+                Resq.space2,
+                Resq.space4,
+                Resq.space3,
+              ),
+              child: Row(
+                children: [
+                  if (onBack != null)
+                    IconButton(
+                      onPressed: onBack,
+                      icon: const Icon(Icons.arrow_back_rounded, color: Resq.ink),
+                      constraints: const BoxConstraints(
+                        minWidth: Resq.tapTarget,
+                        minHeight: Resq.tapTarget,
+                      ),
+                    )
+                  else
+                    const SizedBox(width: Resq.space2),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: ResqType.title(),
                         ),
-                      )
-                    else
-                      const SizedBox(width: Resq.space2),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
+                        if (subtitle != null)
                           Text(
-                            title,
+                            subtitle!,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: ResqType.title(color: ResqDark.ink),
+                            style: ResqType.caption(),
                           ),
-                          if (subtitle != null)
-                            Text(
-                              subtitle!,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: ResqType.caption(color: ResqDark.inkMuted),
-                            ),
-                        ],
-                      ),
+                      ],
                     ),
-                    ...?actions,
-                  ],
-                ),
+                  ),
+                  ...?actions,
+                ],
               ),
-              Expanded(child: Padding(padding: padding, child: body)),
-            ],
-          ),
+            ),
+            Expanded(child: Padding(padding: padding, child: body)),
+          ],
         ),
       ),
     );
   }
 }
 
-/// The card, in driver dark.
+/// The card, driver side — same white surface and hairline as the patient app.
 class DriverCard extends StatelessWidget {
   const DriverCard({
     super.key,
@@ -113,20 +108,40 @@ class DriverCard extends StatelessWidget {
   final VoidCallback? onTap;
   final Color? accent;
 
+  static const double _accentWidth = 4;
+
   @override
   Widget build(BuildContext context) {
+    // The accent stripe is a Positioned child of a Stack, not a stretched Row
+    // child. `CrossAxisAlignment.stretch` in a Row asks every child to fill the
+    // cross axis, which inside a ListView is infinite — that assertion killed
+    // the layout of every card on this screen, and in a release build a failed
+    // widget paints as an empty box. It is why the driver dashboard showed a
+    // duty toggle and then nothing at all.
     final card = Container(
       decoration: BoxDecoration(
-        color: ResqDark.surface,
+        color: Resq.surface,
         borderRadius: BorderRadius.circular(Resq.radiusCard),
-        border: Border.all(color: accent ?? ResqDark.border),
+        border: Border.all(color: Resq.border),
+        boxShadow: Resq.cardShadow,
       ),
       clipBehavior: Clip.antiAlias,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+      child: Stack(
         children: [
-          if (accent != null) Container(width: 3, color: accent),
-          Expanded(child: Padding(padding: padding, child: child)),
+          Padding(
+            padding: accent == null
+                ? padding
+                : padding.copyWith(left: padding.left + _accentWidth),
+            child: child,
+          ),
+          if (accent != null)
+            Positioned(
+              left: 0,
+              top: 0,
+              bottom: 0,
+              width: _accentWidth,
+              child: ColoredBox(color: accent!),
+            ),
         ],
       ),
     );
@@ -149,7 +164,7 @@ class StatTile extends StatelessWidget {
     super.key,
     required this.value,
     required this.label,
-    this.color = ResqDark.ink,
+    this.color = Resq.ink,
     this.icon,
   });
 
@@ -176,11 +191,7 @@ class StatTile extends StatelessWidget {
             style: ResqType.title(color: color),
           ),
           const SizedBox(height: 2),
-          Text(
-            label,
-            maxLines: 2,
-            style: ResqType.caption(color: ResqDark.inkMuted),
-          ),
+          Text(label, maxLines: 2, style: ResqType.caption()),
         ],
       ),
     );
@@ -189,7 +200,7 @@ class StatTile extends StatelessWidget {
 
 /// What the driver is doing right now, as one enormous control.
 ///
-/// Four states, because "offline" and "the socket has not connected yet" are
+/// Four states, because "off duty" and "the socket has not connected yet" are
 /// different problems and only one of them is the driver's to fix.
 enum DutyState { offline, connecting, online, onCase }
 
@@ -205,27 +216,32 @@ class DutyToggle extends StatelessWidget {
   final VoidCallback? onTap;
   final bool busy;
 
-  ({Color color, String label, String hint, IconData icon}) get _look => switch (state) {
+  ({Color color, Color tint, String label, String hint, IconData icon}) get _look =>
+      switch (state) {
         DutyState.online => (
             color: Resq.ready,
+            tint: Resq.readyTint,
             label: 'On duty',
             hint: 'Tap to stop receiving emergencies',
             icon: Icons.check_circle_rounded,
           ),
         DutyState.onCase => (
             color: Resq.info,
+            tint: Resq.infoTint,
             label: 'On a case',
             hint: 'Finish the run before going off duty',
             icon: Icons.local_shipping_rounded,
           ),
         DutyState.connecting => (
             color: Resq.decision,
+            tint: Resq.decisionTint,
             label: 'Connecting…',
             hint: 'Reaching the ResQPK server',
             icon: Icons.sync_rounded,
           ),
         DutyState.offline => (
-            color: ResqDark.inkMuted,
+            color: Resq.inkMuted,
+            tint: Resq.surfaceAlt,
             label: 'Off duty',
             hint: 'Tap to start receiving emergencies',
             icon: Icons.power_settings_new_rounded,
@@ -243,19 +259,17 @@ class DutyToggle extends StatelessWidget {
         duration: const Duration(milliseconds: 250),
         padding: const EdgeInsets.symmetric(vertical: Resq.space5, horizontal: Resq.space5),
         decoration: BoxDecoration(
-          color: live ? look.color.withValues(alpha: 0.16) : ResqDark.surface,
+          color: live ? look.tint : Resq.surface,
           borderRadius: BorderRadius.circular(Resq.radiusCard),
-          border: Border.all(color: live ? look.color : ResqDark.border, width: live ? 1.5 : 1),
+          border: Border.all(color: live ? look.color : Resq.border, width: live ? 1.5 : 1),
+          boxShadow: Resq.cardShadow,
         ),
         child: Row(
           children: [
             Container(
               width: 56,
               height: 56,
-              decoration: BoxDecoration(
-                color: look.color.withValues(alpha: live ? 0.22 : 0.12),
-                shape: BoxShape.circle,
-              ),
+              decoration: BoxDecoration(color: look.tint, shape: BoxShape.circle),
               child: busy
                   ? Padding(
                       padding: const EdgeInsets.all(16),
@@ -268,9 +282,9 @@ class DutyToggle extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(look.label, style: ResqType.title(color: live ? look.color : ResqDark.ink)),
+                  Text(look.label, style: ResqType.title(color: live ? look.color : Resq.ink)),
                   const SizedBox(height: 2),
-                  Text(look.hint, style: ResqType.caption(color: ResqDark.inkMuted)),
+                  Text(look.hint, style: ResqType.caption()),
                 ],
               ),
             ),
@@ -298,7 +312,7 @@ class DriverRoundButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = onTap == null ? ResqDark.inkFaint : (tint ?? ResqDark.ink);
+    final color = onTap == null ? Resq.inkFaint : (tint ?? Resq.inkSoft);
 
     return GestureDetector(
       onTap: onTap,
@@ -306,9 +320,9 @@ class DriverRoundButton extends StatelessWidget {
         width: Resq.tapTarget,
         height: Resq.tapTarget,
         decoration: BoxDecoration(
-          color: ResqDark.surface,
+          color: Resq.surface,
           shape: BoxShape.circle,
-          border: Border.all(color: tint ?? ResqDark.border),
+          border: Border.all(color: tint?.withValues(alpha: 0.5) ?? Resq.border),
         ),
         child: Stack(
           alignment: Alignment.center,
@@ -337,7 +351,7 @@ class DriverRoundButton extends StatelessWidget {
   }
 }
 
-/// Full-width action, dark side.
+/// Full-width action.
 class DriverButton extends StatelessWidget {
   const DriverButton({
     super.key,
@@ -364,7 +378,7 @@ class DriverButton extends StatelessWidget {
         onPressed: busy ? null : onPressed,
         style: ElevatedButton.styleFrom(
           backgroundColor: color,
-          disabledBackgroundColor: ResqDark.surfaceHigh,
+          disabledBackgroundColor: Resq.surfaceAlt,
           foregroundColor: Colors.white,
           elevation: 0,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(Resq.radiusControl)),

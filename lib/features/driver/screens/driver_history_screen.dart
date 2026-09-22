@@ -34,7 +34,7 @@ class DriverHistoryScreen extends ConsumerWidget {
         ),
         data: (h) => RefreshIndicator(
           color: Resq.ready,
-          backgroundColor: ResqDark.surface,
+          backgroundColor: Resq.surface,
           onRefresh: () async => ref.invalidate(driverHistoryProvider),
           child: ListView(
             padding: const EdgeInsets.only(bottom: Resq.space6),
@@ -49,7 +49,7 @@ class DriverHistoryScreen extends ConsumerWidget {
                     padding: const EdgeInsets.only(bottom: Resq.space3),
                     child: Text(
                       _dayLabel(entry.key),
-                      style: ResqType.section(color: ResqDark.ink),
+                      style: ResqType.section(color: Resq.ink),
                     ),
                   ),
                   for (final trip in entry.value)
@@ -160,9 +160,9 @@ class _TripCard extends StatelessWidget {
 
   ({Color color, String label}) get _outcome => switch (trip.status) {
         'completed' => (color: Resq.ready, label: 'Completed'),
-        'cancelled' => (color: ResqDark.inkMuted, label: 'Cancelled'),
+        'cancelled' => (color: Resq.inkMuted, label: 'Cancelled'),
         'driver_assigned' || 'arrived' || 'en_route' => (color: Resq.info, label: 'In progress'),
-        _ => (color: ResqDark.inkMuted, label: trip.status),
+        _ => (color: Resq.inkMuted, label: trip.status),
       };
 
   String get _time {
@@ -193,10 +193,10 @@ class _TripCard extends StatelessWidget {
                       : 'Emergency ${trip.caseNumber}',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: ResqType.bodyStrong(color: ResqDark.ink),
+                  style: ResqType.bodyStrong(color: Resq.ink),
                 ),
               ),
-              Text(_time, style: ResqType.caption(color: ResqDark.inkMuted)),
+              Text(_time, style: ResqType.caption(color: Resq.inkMuted)),
             ],
           ),
           const SizedBox(height: 4),
@@ -205,7 +205,7 @@ class _TripCard extends StatelessWidget {
               trip.address!,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: ResqType.caption(color: ResqDark.inkMuted),
+              style: ResqType.caption(color: Resq.inkMuted),
             ),
           const SizedBox(height: Resq.space2),
           Wrap(
@@ -214,11 +214,11 @@ class _TripCard extends StatelessWidget {
             children: [
               _Tag(label: outcome.label, color: outcome.color),
               if (trip.hospitalName?.isNotEmpty == true)
-                _Tag(label: trip.hospitalName!, color: ResqDark.inkMuted),
+                _Tag(label: trip.hospitalName!, color: Resq.inkMuted),
               if (arrival != null && arrival > 0)
                 _Tag(
                   label: 'Reached in ${(arrival / 60).ceil()} min',
-                  color: ResqDark.inkMuted,
+                  color: Resq.inkMuted,
                 ),
               if (trip.urgencyLevel?.isNotEmpty == true)
                 _Tag(
@@ -265,15 +265,15 @@ class _Empty extends StatelessWidget {
             height: 160,
             fit: BoxFit.contain,
             errorBuilder: (_, __, ___) =>
-                const Icon(Icons.history_rounded, size: 72, color: ResqDark.inkFaint),
+                const Icon(Icons.history_rounded, size: 72, color: Resq.inkFaint),
           ),
           const SizedBox(height: Resq.space4),
-          Text('No runs yet', style: ResqType.section(color: ResqDark.ink)),
+          Text('No runs yet', style: ResqType.section(color: Resq.ink)),
           const SizedBox(height: Resq.space2),
           Text(
             'Go on duty and the emergencies you answer will be listed here.',
             textAlign: TextAlign.center,
-            style: ResqType.body(color: ResqDark.inkMuted),
+            style: ResqType.body(color: Resq.inkMuted),
           ),
         ],
       ),
@@ -295,18 +295,18 @@ class _Failed extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.cloud_off_rounded, size: 48, color: ResqDark.inkFaint),
+            const Icon(Icons.cloud_off_rounded, size: 48, color: Resq.inkFaint),
             const SizedBox(height: Resq.space3),
             Text(
               'Could not load your history',
-              style: ResqType.section(color: ResqDark.ink),
+              style: ResqType.section(color: Resq.ink),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: Resq.space2),
             Text(
               message,
               textAlign: TextAlign.center,
-              style: ResqType.caption(color: ResqDark.inkMuted),
+              style: ResqType.caption(color: Resq.inkMuted),
             ),
             const SizedBox(height: Resq.space4),
             DriverButton(label: 'Try again', icon: Icons.refresh_rounded, onPressed: onRetry),

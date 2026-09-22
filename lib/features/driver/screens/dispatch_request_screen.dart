@@ -112,7 +112,7 @@ class _DispatchRequestScreenState extends State<DispatchRequestScreen> {
   Future<String?> _askReason() {
     return showModalBottomSheet<String>(
       context: context,
-      backgroundColor: ResqDark.surface,
+      backgroundColor: Resq.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(Resq.radiusCard)),
       ),
@@ -123,12 +123,12 @@ class _DispatchRequestScreenState extends State<DispatchRequestScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text('Declined — why?', style: ResqType.title(color: ResqDark.ink)),
+              Text('Declined — why?', style: ResqType.title(color: Resq.ink)),
               const SizedBox(height: 4),
               Text(
                 'The case has already gone to the next ambulance. This only helps '
                 'dispatch understand what is happening on the ground.',
-                style: ResqType.caption(color: ResqDark.inkMuted),
+                style: ResqType.caption(color: Resq.inkMuted),
               ),
               const SizedBox(height: Resq.space4),
               for (final reason in kDeclineReasons)
@@ -139,12 +139,12 @@ class _DispatchRequestScreenState extends State<DispatchRequestScreen> {
                     onTap: () => Navigator.of(sheetCtx).pop(reason.key),
                     child: Row(
                       children: [
-                        Icon(reason.icon, size: 20, color: ResqDark.inkMuted),
+                        Icon(reason.icon, size: 20, color: Resq.inkMuted),
                         const SizedBox(width: Resq.space3),
                         Expanded(
                           child: Text(
                             reason.label,
-                            style: ResqType.body(color: ResqDark.ink),
+                            style: ResqType.body(color: Resq.ink),
                           ),
                         ),
                       ],
@@ -153,7 +153,7 @@ class _DispatchRequestScreenState extends State<DispatchRequestScreen> {
                 ),
               TextButton(
                 onPressed: () => Navigator.of(sheetCtx).pop(),
-                child: Text('Skip', style: ResqType.button(color: ResqDark.inkMuted)),
+                child: Text('Skip', style: ResqType.button(color: Resq.inkMuted)),
               ),
             ],
           ),
@@ -172,9 +172,9 @@ class _DispatchRequestScreenState extends State<DispatchRequestScreen> {
     final ringColor = progress > 0.4 ? Resq.ready : (progress > 0.2 ? Resq.decision : Resq.critical);
 
     return Theme(
-      data: ResqTheme.dark,
+      data: ResqTheme.light,
       child: Scaffold(
-        backgroundColor: ResqDark.canvas,
+        backgroundColor: Resq.canvas,
         body: SafeArea(
           child: Padding(
             padding: const EdgeInsets.all(Resq.space4),
@@ -201,19 +201,19 @@ class _DispatchRequestScreenState extends State<DispatchRequestScreen> {
                       ),
                     ),
                     const Spacer(),
-                    Text(r.caseNumber, style: ResqType.caption(color: ResqDark.inkMuted)),
+                    Text(r.caseNumber, style: ResqType.caption(color: Resq.inkMuted)),
                   ],
                 ),
                 const SizedBox(height: Resq.space4),
 
                 Text(
                   r.distanceText,
-                  style: ResqType.display(color: ResqDark.ink).copyWith(fontSize: 40),
+                  style: ResqType.display(color: Resq.ink).copyWith(fontSize: 40),
                 ),
                 Text(
                   'away · ${r.patientName} needs an ambulance',
                   textAlign: TextAlign.center,
-                  style: ResqType.body(color: ResqDark.inkMuted),
+                  style: ResqType.body(color: Resq.inkMuted),
                 ),
                 const SizedBox(height: Resq.space4),
 
@@ -230,7 +230,7 @@ class _DispatchRequestScreenState extends State<DispatchRequestScreen> {
                           ),
                         ),
                         children: [
-                          const ResQPKTileLayer(),
+                          const ResQPKTileLayer(light: true),
                           MarkerLayer(
                             markers: [
                               Marker(
@@ -267,18 +267,18 @@ class _DispatchRequestScreenState extends State<DispatchRequestScreen> {
                             value: value,
                             strokeWidth: 6,
                             color: ringColor,
-                            backgroundColor: ResqDark.surfaceHigh,
+                            backgroundColor: Resq.surfaceAlt,
                           ),
                         ),
                       ),
                       Text(
                         '$seconds',
-                        style: ResqType.display(color: ResqDark.ink).copyWith(fontSize: 32),
+                        style: ResqType.display(color: Resq.ink).copyWith(fontSize: 32),
                       ),
                     ],
                   ),
                 ),
-                Text('seconds to answer', style: ResqType.caption(color: ResqDark.inkMuted)),
+                Text('seconds to answer', style: ResqType.caption(color: Resq.inkMuted)),
                 const SizedBox(height: Resq.space4),
 
                 Row(
@@ -289,14 +289,14 @@ class _DispatchRequestScreenState extends State<DispatchRequestScreen> {
                         child: OutlinedButton(
                           onPressed: _busy ? null : _decline,
                           style: OutlinedButton.styleFrom(
-                            side: const BorderSide(color: ResqDark.border),
+                            side: const BorderSide(color: Resq.border),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(Resq.radiusControl),
                             ),
                           ),
                           child: Text(
                             'Decline',
-                            style: ResqType.button(color: ResqDark.inkMuted),
+                            style: ResqType.button(color: Resq.inkMuted),
                           ),
                         ),
                       ),

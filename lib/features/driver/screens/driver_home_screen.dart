@@ -131,7 +131,7 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
         ],
         body: RefreshIndicator(
           color: Resq.ready,
-          backgroundColor: ResqDark.surface,
+          backgroundColor: Resq.surface,
           onRefresh: () async => ref.invalidate(driverHistoryProvider),
           child: ListView(
             padding: const EdgeInsets.only(bottom: Resq.space6),
@@ -167,7 +167,7 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
               _GpsCard(position: position, broadcasting: driverState.isBroadcasting),
               const SizedBox(height: Resq.space4),
 
-              Text('Your record', style: ResqType.section(color: ResqDark.ink)),
+              Text('Your record', style: ResqType.section(color: Resq.ink)),
               const SizedBox(height: Resq.space3),
               history.when(
                 loading: () => const _StatsRow(
@@ -258,7 +258,7 @@ class _GpsCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final accuracy = position?.accuracy;
     final (color, label) = switch (accuracy) {
-      null => (ResqDark.inkMuted, 'Waiting for GPS…'),
+      null => (Resq.inkMuted, 'Waiting for GPS…'),
       < 30 => (Resq.ready, 'GPS is good'),
       < 60 => (Resq.decision, 'GPS is rough — dispatch may misjudge your distance'),
       _ => (Resq.critical, 'GPS is poor — move away from buildings'),
@@ -274,14 +274,14 @@ class _GpsCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(label, style: ResqType.bodyStrong(color: ResqDark.ink)),
+                Text(label, style: ResqType.bodyStrong(color: Resq.ink)),
                 const SizedBox(height: 2),
                 Text(
                   accuracy == null
                       ? 'Your position is what dispatch sorts ambulances by.'
                       : 'Accurate to about ${accuracy.toStringAsFixed(0)} m'
                           '${broadcasting ? ' · sharing live' : ''}',
-                  style: ResqType.caption(color: ResqDark.inkMuted),
+                  style: ResqType.caption(color: Resq.inkMuted),
                 ),
               ],
             ),
@@ -316,22 +316,22 @@ class _NavCard extends StatelessWidget {
             width: 44,
             height: 44,
             decoration: BoxDecoration(
-              color: ResqDark.surfaceHigh,
+              color: Resq.surfaceAlt,
               borderRadius: BorderRadius.circular(Resq.radiusControl),
             ),
-            child: Icon(icon, color: ResqDark.ink, size: 21),
+            child: Icon(icon, color: Resq.ink, size: 21),
           ),
           const SizedBox(width: Resq.space3),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: ResqType.bodyStrong(color: ResqDark.ink)),
-                Text(subtitle, style: ResqType.caption(color: ResqDark.inkMuted)),
+                Text(title, style: ResqType.bodyStrong(color: Resq.ink)),
+                Text(subtitle, style: ResqType.caption(color: Resq.inkMuted)),
               ],
             ),
           ),
-          const Icon(Icons.chevron_right_rounded, color: ResqDark.inkFaint),
+          const Icon(Icons.chevron_right_rounded, color: Resq.inkFaint),
         ],
       ),
     );
@@ -383,11 +383,11 @@ class _ConnectionTrouble extends StatelessWidget {
                   style: ResqType.bodyStrong(color: color),
                 ),
                 if (reason != null)
-                  Text(reason!, style: ResqType.caption(color: ResqDark.inkMuted)),
+                  Text(reason!, style: ResqType.caption(color: Resq.inkMuted)),
                 if (reason == null && !failed)
                   Text(
                     'You will not be offered emergencies until this finishes.',
-                    style: ResqType.caption(color: ResqDark.inkMuted),
+                    style: ResqType.caption(color: Resq.inkMuted),
                   ),
               ],
             ),
