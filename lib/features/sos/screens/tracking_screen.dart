@@ -949,11 +949,32 @@ class _TrackingCard extends StatelessWidget {
                   ),
 
                 const SizedBox(height: Resq.space4),
-                SecondaryButton(
-                  label: hasReport ? 'View emergency report' : 'Add details for the crew',
-                  icon: hasReport ? Icons.description_outlined : Icons.mic_none_rounded,
-                  onPressed: onAiReport,
-                  height: Resq.tapTarget,
+                // Filled, and named for what it makes. As "Add details for the
+                // crew" it read as optional housekeeping and went unnoticed —
+                // this is the photo, voice and AI report the hospital reads
+                // before the ambulance arrives, and it is the one thing on this
+                // screen the patient can still do something about.
+                if (hasReport)
+                  SecondaryButton(
+                    label: 'View AI report',
+                    icon: Icons.picture_as_pdf_rounded,
+                    onPressed: onAiReport,
+                    height: 52,
+                  )
+                else
+                  PrimaryButton(
+                    label: 'Create AI emergency report',
+                    icon: Icons.auto_awesome_rounded,
+                    onPressed: onAiReport,
+                    height: 52,
+                  ),
+                const SizedBox(height: 2),
+                Text(
+                  hasReport
+                      ? 'Sent to the hospital. Tap to read or share it.'
+                      : 'Photo and voice → a report the hospital reads before you arrive',
+                  textAlign: TextAlign.center,
+                  style: ResqType.micro(),
                 ),
                 TextButton(
                   onPressed: onCancel,
