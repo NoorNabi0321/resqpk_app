@@ -16,10 +16,10 @@ const Map<String, String> _whenToUse = {
   'choking-guide': 'Cannot speak, cough or breathe. Blocked airway.',
   'burns-guide': 'Fire, hot oil, steam, chemicals or electricity.',
   'snake-bite-guide': 'Bitten by a snake. Keep them still.',
-  'road-accident-guide': 'Crash injuries. Do not move a neck or spine.',
-  'drowning-guide': 'Pulled from water, not breathing properly.',
-  'cardiac-arrest-guide': 'Sudden collapse, chest pain, gasping.',
   'bleeding-control-guide': 'Heavy bleeding that will not stop.',
+  'fracture-guide': 'Possible broken bone. Swelling, pain or deformity.',
+  'heatstroke-guide': 'Too hot, confused or collapsed in the sun.',
+  'eye-injury-guide': 'Object, chemicals, dust or trauma to the eye.',
 };
 
 /// Urdu equivalents, so the card reads as one language rather than two.
@@ -28,11 +28,34 @@ const Map<String, String> _whenToUseUr = {
   'choking-guide': 'گلے میں کچھ پھنس گیا، سانس بند ہے۔',
   'burns-guide': 'آگ، گرم تیل، بھاپ یا کیمیکل سے جلنا۔',
   'snake-bite-guide': 'سانپ نے کاٹا ہے۔ مریض کو ہلنے نہ دیں۔',
-  'road-accident-guide': 'حادثے کی چوٹیں۔ گردن کو نہ ہلائیں۔',
-  'drowning-guide': 'پانی سے نکالا گیا، سانس ٹھیک نہیں۔',
-  'cardiac-arrest-guide': 'اچانک گر جانا، سینے میں درد۔',
   'bleeding-control-guide': 'خون بہہ رہا ہے اور رک نہیں رہا۔',
+  'fracture-guide': 'ہڈی ٹوٹ سکتی ہے۔ سوجن یا شدید درد۔',
+  'heatstroke-guide': 'دھوپ میں زیادہ گرمی، بے ہوشی یا الجھن۔',
+  'eye-injury-guide': 'آنکھ میں چیز، کیمیکل، مٹی یا چوٹ۔',
 };
+
+/// The badge that stands in for the category, so a row is recognisable before
+/// a word of it is read.
+const Map<String, ({IconData icon, Color color, Color tint})> _badges = {
+  'cpr-guide': (icon: Icons.monitor_heart_rounded, color: Resq.critical, tint: Resq.criticalTint),
+  'choking-guide': (icon: Icons.air_rounded, color: Resq.critical, tint: Resq.criticalTint),
+  'bleeding-control-guide':
+      (icon: Icons.bloodtype_rounded, color: Resq.critical, tint: Resq.criticalTint),
+  'burns-guide':
+      (icon: Icons.local_fire_department_rounded, color: Resq.brand, tint: Resq.brandTint),
+  'snake-bite-guide': (icon: Icons.healing_rounded, color: Resq.ready, tint: Resq.readyTint),
+  'fracture-guide':
+      (icon: Icons.personal_injury_rounded, color: Resq.decision, tint: Resq.decisionTint),
+  'heatstroke-guide': (icon: Icons.thermostat_rounded, color: Resq.decision, tint: Resq.decisionTint),
+  'eye-injury-guide': (icon: Icons.visibility_rounded, color: Resq.info, tint: Resq.infoTint),
+};
+
+const _fallbackBadge =
+    (icon: Icons.medical_services_rounded, color: Resq.brandInk, tint: Resq.brandTint);
+
+/// A shade lighter than the page, so a card lifts off the cream without
+/// becoming the white of a form field.
+const Color _cardCream = Color(0xFFFCF8F2);
 
 String guideBlurb(FirstAidGuideModel guide, String language) {
   final table = language == 'ur' ? _whenToUseUr : _whenToUse;
@@ -47,10 +70,10 @@ String guideBlurb(FirstAidGuideModel guide, String language) {
 
 /// A guide, as a row you can read at a glance.
 ///
-/// Was a two-up grid of square tiles, where the title wrapped to two lines and
-/// there was no room to say what the guide was for. A full-width row fits the
-/// category, the line that matters, and the picture — and stacks in the order
-/// someone would scan them.
+/// Badge, then the category and the line that matters, then the illustration —
+/// which is drawn with BoxFit.contain on the card's own cream, because these
+/// covers have their backgrounds removed and cropping one loses the very thing
+/// it is showing.
 class GuideCard extends StatelessWidget {
   const GuideCard({
     super.key,
@@ -68,28 +91,23 @@ class GuideCard extends StatelessWidget {
     final urdu = language == 'ur';
     final cover = FirstAidArt.cover(guide.slug);
     final steps = guide.getSteps(language).length;
+    final badge = _badges[guide.slug] ?? _fallbackBadge;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: Resq.space3),
       child: Material(
-        color: Resq.surface,
+        color: _cardCream,
         borderRadius: BorderRadius.circular(Resq.radiusCard),
         child: InkWell(
           onTap: onTap,
           borderRadius: BorderRadius.circular(Resq.radiusCard),
           child: Directionality(
-            // In Urdu the whole row mirrors: stripe and text on the right,
+            // In Urdu the whole row mirrors: badge and text on the right,
             // picture on the left. Half-mirrored layouts read as broken.
             textDirection: urdu ? TextDirection.rtl : TextDirection.ltr,
             child: Container(
-              // Nastaliq needs 1.8 line height to keep its descenders off the
-              // line below, so the same three lines of text are a third taller
-              // in Urdu. One height for both languages clipped the Urdu.
-              //
-              // The slack on top of the measured minimum is deliberate: the
-              // font falls back on some devices, and a first-aid card that
-              // clips its own description is worse than one with a little air.
-              height: urdu ? 148 : 122,
+              height: urdu ? 128 : 106,
+              padding: const EdgeInsets.fromLTRB(Resq.space3, Resq.space2, 0, Resq.space2),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(Resq.radiusCard),
                 border: Border.all(color: Resq.border),
@@ -98,45 +116,46 @@ class GuideCard extends StatelessWidget {
               clipBehavior: Clip.antiAlias,
               child: Row(
                 children: [
-                  // The coral spine. Identical on every card on purpose: it is
-                  // what makes the list read as one set of things.
-                  Container(width: 6, color: Resq.brand),
+                  Container(
+                    width: 38,
+                    height: 38,
+                    decoration: BoxDecoration(color: badge.tint, shape: BoxShape.circle),
+                    child: Icon(badge.icon, size: 20, color: badge.color),
+                  ),
+                  const SizedBox(width: Resq.space3),
                   Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(
-                        Resq.space4,
-                        Resq.space3,
-                        Resq.space3,
-                        Resq.space3,
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            _shortName(guide, language),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: urdu
-                                ? ResqType.nastaliq(size: 18)
-                                : ResqType.section(),
-                          ),
-                          const SizedBox(height: 3),
-                          Text(
-                            guideBlurb(guide, language),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: urdu
-                                ? ResqType.nastaliq(size: 13, color: Resq.inkSoft)
-                                : ResqType.caption(color: Resq.inkSoft),
-                          ),
-                          const SizedBox(height: Resq.space2),
-                          _MetaRow(steps: steps, illustrated: cover != null, urdu: urdu),
-                        ],
-                      ),
+                    flex: 5,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          _shortName(guide, language),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: urdu
+                              ? ResqType.nastaliq(size: 16)
+                              : ResqType.bodyStrong().copyWith(fontSize: 16),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          guideBlurb(guide, language),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: urdu
+                              ? ResqType.nastaliq(size: 12, color: Resq.inkSoft)
+                              : ResqType.caption(color: Resq.inkSoft).copyWith(fontSize: 12.5),
+                        ),
+                        const SizedBox(height: 5),
+                        _MetaRow(steps: steps, illustrated: cover != null, urdu: urdu),
+                      ],
                     ),
                   ),
-                  _Cover(path: cover, category: guide.category),
+                  const SizedBox(width: Resq.space2),
+                  Expanded(
+                    flex: 3,
+                    child: _Cover(path: cover, badge: badge),
+                  ),
                 ],
               ),
             ),
@@ -165,14 +184,13 @@ class _MetaRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Flexible, not fixed: on a 320dp phone — and with whatever font the
-    // device actually falls back to — this row is the first thing to run out
-    // of width, and an overflow stripe across a first-aid card is not a thing
-    // anyone should ever see.
+    // Flexible, not fixed: on a 320dp phone this row is the first thing to run
+    // out of width, and an overflow stripe across a first-aid card is not a
+    // thing anyone should ever see.
     return Row(
       children: [
-        const Icon(Icons.list_rounded, size: 13, color: Resq.inkFaint),
-        const SizedBox(width: 4),
+        const Icon(Icons.list_rounded, size: 12, color: Resq.inkFaint),
+        const SizedBox(width: 3),
         Flexible(
           child: Text(
             urdu ? '$steps مراحل' : '$steps steps',
@@ -182,9 +200,9 @@ class _MetaRow extends StatelessWidget {
           ),
         ),
         if (illustrated) ...[
-          const SizedBox(width: Resq.space3),
-          const Icon(Icons.image_rounded, size: 13, color: Resq.ready),
-          const SizedBox(width: 4),
+          const SizedBox(width: Resq.space2),
+          const Icon(Icons.image_rounded, size: 12, color: Resq.ready),
+          const SizedBox(width: 3),
           Flexible(
             child: Text(
               urdu ? 'تصاویر' : 'With pictures',
@@ -200,42 +218,28 @@ class _MetaRow extends StatelessWidget {
 }
 
 class _Cover extends StatelessWidget {
-  const _Cover({required this.path, required this.category});
+  const _Cover({required this.path, required this.badge});
 
   final String? path;
-  final String category;
-
-  static const Map<String, String> _emoji = {
-    'CPR': '❤️',
-    'Choking': '🫁',
-    'Burns': '🔥',
-    'Snake Bite': '🐍',
-    'Road Accident': '🚗',
-    'Drowning': '🌊',
-    'Cardiac Arrest': '⚡',
-    'Bleeding': '🩸',
-  };
+  final ({IconData icon, Color color, Color tint}) badge;
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: 112,
-      height: double.infinity,
-      child: path == null
-          ? Container(
-              color: Resq.brandTint,
-              alignment: Alignment.center,
-              child: Text(_emoji[category] ?? '🩹', style: const TextStyle(fontSize: 34)),
-            )
-          : Image.asset(
-              path!,
-              fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => Container(
-                color: Resq.brandTint,
-                alignment: Alignment.center,
-                child: Text(_emoji[category] ?? '🩹', style: const TextStyle(fontSize: 34)),
-              ),
-            ),
+    if (path == null) {
+      return Center(
+        child: Icon(badge.icon, size: 40, color: badge.color.withValues(alpha: 0.35)),
+      );
+    }
+
+    return Image.asset(
+      path!,
+      // Contain, never cover. These covers are background-removed artwork on
+      // the card's own cream; cropping one cuts off the thing it is showing.
+      fit: BoxFit.contain,
+      alignment: Alignment.centerRight,
+      errorBuilder: (_, __, ___) => Center(
+        child: Icon(badge.icon, size: 40, color: badge.color.withValues(alpha: 0.35)),
+      ),
     );
   }
 }

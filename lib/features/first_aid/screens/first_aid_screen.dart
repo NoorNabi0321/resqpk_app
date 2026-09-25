@@ -14,26 +14,35 @@ import '../providers/first_aid_provider.dart';
 import '../widgets/guide_card.dart';
 
 /// Kept for the AI report screen, which labels its suggested guides with these.
+/// Kept for the AI report screen, which labels its suggested guides with these.
 const Map<String, String> kCategoryEmoji = {
   'CPR': '❤️',
   'Choking': '🫁',
+  'Bleeding': '🩸',
   'Burns': '🔥',
   'Snake Bite': '🐍',
-  'Road Accident': '🚗',
-  'Drowning': '🌊',
-  'Cardiac Arrest': '⚡',
-  'Bleeding': '🩸',
+  'Fracture': '🦴',
+  'Heatstroke': '🌡️',
+  'Eye Injury': '👁️',
 };
 
+/// The eight the library carries, in the order the guides are ordered.
+///
+/// Road Accident, Drowning and Cardiac Arrest were dropped: none had step
+/// artwork, and a first-aid step without a picture is the one people stop
+/// reading. Their emergency types were folded into the guides that remain —
+/// cardiac arrest and drowning both end in CPR, and a road accident is
+/// bleeding and broken bones — so the AI report still resolves a guide for
+/// every emergency it can detect.
 const List<String> kCategories = [
   'CPR',
-  'Cardiac Arrest',
+  'Choking',
   'Bleeding',
   'Burns',
-  'Choking',
   'Snake Bite',
-  'Road Accident',
-  'Drowning',
+  'Fracture',
+  'Heatstroke',
+  'Eye Injury',
 ];
 
 /// The guide library.

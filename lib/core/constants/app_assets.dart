@@ -52,19 +52,20 @@ class AppAssets {
 class FirstAidArt {
   FirstAidArt._();
 
+  /// Every guide in the library has artwork, and every folder has a guide.
+  ///
+  /// Keyed by a fragment of the slug rather than the whole thing, because the
+  /// backend names them and a rename upstream should degrade to "no picture",
+  /// never to a crash or — worse — the wrong illustration on a first-aid step.
   static const Map<String, ({String folder, int steps})> _guides = {
     'cpr': (folder: 'cpr', steps: 6),
     'chok': (folder: 'choking', steps: 6),
     'bleed': (folder: 'bleeding', steps: 6),
     'burn': (folder: 'burns', steps: 5),
     'snake': (folder: 'snakebite', steps: 5),
-    // Drawn, but with no guide behind them in the database yet. They cost
-    // nothing while unmatched, and work the day those guides are added.
     'fractur': (folder: 'fracture', steps: 6),
     'heat': (folder: 'heatstroke', steps: 6),
     'eye': (folder: 'eye-injury', steps: 5),
-    // Still unillustrated: road-accident, drowning and cardiac-arrest. Those
-    // screens fall back to text-only steps.
   };
 
   static ({String folder, int steps})? _match(String slugOrTitle) {

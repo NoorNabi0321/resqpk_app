@@ -38,14 +38,32 @@ void main() {
     for (final expected in [
       'cpr-guide',
       'choking-guide',
+      'bleeding-control-guide',
       'burns-guide',
       'snake-bite-guide',
-      'road-accident-guide',
-      'drowning-guide',
-      'cardiac-arrest-guide',
-      'bleeding-control-guide',
+      'fracture-guide',
+      'heatstroke-guide',
+      'eye-injury-guide',
     ]) {
       expect(slugs, contains(expected));
+    }
+  });
+
+  test('every guide is illustrated', () {
+    // The library and the artwork folders are meant to be the same eight
+    // things. A guide with no pictures is the one people stop reading, and a
+    // folder with no guide is artwork nobody can reach.
+    for (final guide in guides) {
+      expect(
+        FirstAidArt.hasArt(guide.slug),
+        isTrue,
+        reason: '${guide.slug} has no illustrations in assets/first_aid/',
+      );
+      expect(
+        FirstAidArt.stepCount(guide.slug),
+        greaterThanOrEqualTo(guide.stepsEn.length),
+        reason: '${guide.slug} has more steps than it has step pictures',
+      );
     }
   });
 
