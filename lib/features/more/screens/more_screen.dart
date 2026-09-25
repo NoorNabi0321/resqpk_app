@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/constants/app_assets.dart';
 import '../../../core/router/app_router.dart';
@@ -53,17 +54,15 @@ class MoreScreen extends ConsumerWidget {
           ],
 
           _Tile(
-            icon: Icons.local_shipping_rounded,
-            label: isDriver ? 'Driver dashboard' : 'I am a driver',
-            subtitle: isDriver ? 'Go on duty' : 'Sign in to receive emergencies',
-            // The role has to travel with the link. Without it the login screen
-            // opened in patient mode, so driver credentials were checked
-            // against patient accounts and came back "invalid phone or
-            // password" — and its Register link led to the patient form, which
-            // is how a driver ended up with a patient account.
-            onTap: () => context.push(
-              isDriver ? Routes.driverHome : '${Routes.login}?role=driver',
-            ),
+            icon: isDriver ? Icons.local_shipping_rounded : Icons.login_rounded,
+            label: isDriver ? 'Driver dashboard' : 'Sign in',
+            subtitle: isDriver ? 'Go on duty' : 'As a patient or as a driver',
+            // No role in the link. It used to say "I am a driver" and carry
+            // ?role=driver, which was right when the login screen had to be
+            // told which account to check. It now opens with both tabs and the
+            // reader picks there, so a tile that only offers the driver side is
+            // a door marked for staff on the only entrance in the building.
+            onTap: () => context.push(isDriver ? Routes.driverHome : Routes.login),
           ),
 
           const SizedBox(height: Resq.space6),
@@ -144,17 +143,99 @@ class _Tile extends StatelessWidget {
 }
 
 class _About extends StatelessWidget {
+  /// The three numbers worth dialling in Hyderabad, in the order you would
+  /// try them: government rescue, then the two charity ambulance services.
+  static const _numbers = [
+    (service: 'Rescue', number: '1122'),
+    (service: 'Edhi', number: '115'),
+    (service: 'Chhipa', number: '1020'),
+  ];
+
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Image.asset(AppAssets.logoWordmark, height: 34),
-        const SizedBox(height: Resq.space2),
+        Image.asset(AppAssets.logoWordmark, height: 56),
+        const SizedBox(height: Resq.space3),
         Text('Emergency response for Hyderabad, Sindh',
             style: ResqType.caption(), textAlign: TextAlign.center),
-        const SizedBox(height: Resq.space1),
-        Text('Rescue 1122 · Edhi 115 · Chhipa 1020', style: ResqType.micro()),
+        const SizedBox(height: Resq.space4),
+        // These were a line of grey text. They are the fallback for when the
+        // app itself cannot find anyone — which is the moment someone is least
+        // able to copy a number out of a caption and type it into a dialer.
+        Row(
+          children: [
+            for (final n in _numbers) ...[
+              if (n != _numbers.first) const SizedBox(width: Resq.space2),
+              Expanded(child: _EmergencyNumber(service: n.service, number: n.number)),
+            ],
+          ],
+        ),
       ],
+    );
+  }
+}
+
+/// One emergency number, as a button that opens the dialer.
+class _EmergencyNumber extends StatelessWidget {
+  const _EmergencyNumber({required this.service, required this.number});
+
+  final String service;
+  final String number;
+
+  Future<void> _dial(BuildContext context) async {
+    final uri = Uri(scheme: 'tel', path: number);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri);
+      return;
+    }
+    // A phone with no dialer at all — a tablet, usually. Saying so beats a
+    // button that looks tappable and does nothing, which is what the whole
+    // app did on Android 11+ before the manifest declared the dial intent.
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Cannot open the dialer. $service is $number.')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Resq.surface,
+      borderRadius: BorderRadius.circular(Resq.radiusControl),
+      child: InkWell(
+        onTap: () => _dial(context),
+        borderRadius: BorderRadius.circular(Resq.radiusControl),
+        child: Container(
+          constraints: const BoxConstraints(minHeight: Resq.tapTarget),
+          padding: const EdgeInsets.symmetric(
+            horizontal: Resq.space2,
+            vertical: Resq.space3,
+          ),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(Resq.radiusControl),
+            border: Border.all(color: Resq.critical.withValues(alpha: 0.35)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.call_rounded, size: 16, color: Resq.critical),
+              const SizedBox(height: 4),
+              // The number leads. It is what gets dialled, and on a narrow
+              // phone it is the part that must survive being squeezed.
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(number, style: ResqType.bodyStrong(color: Resq.critical)),
+              ),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(service, style: ResqType.micro()),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

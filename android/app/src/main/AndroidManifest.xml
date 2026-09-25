@@ -50,5 +50,14 @@
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
         </intent>
+        <!-- The dialer. Without this, package visibility on Android 11 and up
+             hides it from us, canLaunchUrl("tel:1122") answers false, and every
+             call button in the app does nothing at all: 1122, the hospital
+             numbers, the camp numbers, the driver and the patient calling each
+             other mid-dispatch. It fails silently and only on real phones. -->
+        <intent>
+            <action android:name="android.intent.action.DIAL"/>
+            <data android:scheme="tel"/>
+        </intent>
     </queries>
 </manifest>
