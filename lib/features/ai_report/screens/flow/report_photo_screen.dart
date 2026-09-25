@@ -9,6 +9,7 @@ import '../../../../core/router/app_router.dart';
 import '../../../../core/theme/tokens.dart';
 import '../../../../core/theme/typography.dart';
 import '../../providers/ai_report_provider.dart';
+import 'report_actions.dart';
 import 'report_flow_chrome.dart';
 
 /// Step 1 of the report: a photo of the patient.
@@ -221,37 +222,19 @@ class _Actions extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         if (hasPhoto)
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: onRetake,
-                  icon: const Icon(Icons.replay_rounded, size: 18, color: Resq.inkSoft),
-                  label: Text('Retake', style: ResqType.button(color: Resq.inkSoft)),
-                  style: OutlinedButton.styleFrom(
-                    minimumSize: const Size.fromHeight(Resq.tapTarget),
-                    side: BorderSide(color: Resq.border),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(Resq.radiusControl),
-                    ),
-                  ),
-                ),
+          ReportActions(
+            actions: [
+              ReportAction(
+                icon: Icons.replay_rounded,
+                tooltip: 'Retake the photo',
+                onPressed: onRetake,
               ),
-              const SizedBox(width: Resq.space3),
-              Expanded(
-                flex: 2,
-                child: ElevatedButton(
-                  onPressed: onNext,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Resq.brandInk,
-                    elevation: 0,
-                    minimumSize: const Size.fromHeight(Resq.tapTarget),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(Resq.radiusControl),
-                    ),
-                  ),
-                  child: Text('Next', style: ResqType.button()),
-                ),
+              ReportAction(
+                icon: Icons.arrow_forward_rounded,
+                tooltip: 'Next',
+                onPressed: onNext,
+                filled: true,
+                color: Resq.brandInk,
               ),
             ],
           )

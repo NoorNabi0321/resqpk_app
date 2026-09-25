@@ -8,6 +8,7 @@ import '../../../../core/theme/tokens.dart';
 import '../../../../core/theme/typography.dart';
 import '../../data/models/recording_state_model.dart';
 import '../../providers/ai_report_provider.dart';
+import 'report_actions.dart';
 import 'report_flow_chrome.dart';
 
 /// Step 3, spoken. One microphone in the middle of the screen.
@@ -44,37 +45,18 @@ class ReportVoiceScreen extends ConsumerWidget {
         if (context.mounted) context.pop();
       },
       bottomBar: recorded
-          ? Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: notifier.cancelRecording,
-                    icon: const Icon(Icons.replay_rounded, size: 18, color: Resq.inkSoft),
-                    label: Text('Record again', style: ResqType.button(color: Resq.inkSoft)),
-                    style: OutlinedButton.styleFrom(
-                      minimumSize: const Size.fromHeight(56),
-                      side: BorderSide(color: Resq.border),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(Resq.radiusControl),
-                      ),
-                    ),
-                  ),
+          ? ReportActions(
+              actions: [
+                ReportAction(
+                  icon: Icons.replay_rounded,
+                  tooltip: 'Record again',
+                  onPressed: notifier.cancelRecording,
                 ),
-                const SizedBox(width: Resq.space3),
-                Expanded(
-                  flex: 2,
-                  child: ElevatedButton(
-                    onPressed: () => context.push(Routes.reportGenerating, extra: caseId),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Resq.critical,
-                      elevation: 0,
-                      minimumSize: const Size.fromHeight(56),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(Resq.radiusControl),
-                      ),
-                    ),
-                    child: Text('Generate report', style: ResqType.button()),
-                  ),
+                ReportAction(
+                  icon: Icons.auto_awesome_rounded,
+                  tooltip: 'Generate the report',
+                  onPressed: () => context.push(Routes.reportGenerating, extra: caseId),
+                  filled: true,
                 ),
               ],
             )

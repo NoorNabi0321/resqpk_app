@@ -6,6 +6,7 @@ import '../../../../core/router/app_router.dart';
 import '../../../../core/theme/tokens.dart';
 import '../../../../core/theme/typography.dart';
 import '../../providers/ai_report_provider.dart';
+import 'report_actions.dart';
 import 'report_flow_chrome.dart';
 
 /// Step 3, typed. English, Urdu or Roman Urdu — all three reach the same
@@ -62,24 +63,24 @@ class _ReportTextScreenState extends ConsumerState<ReportTextScreen> {
       onBack: () => context.pop(),
       bottomBar: ValueListenableBuilder<TextEditingValue>(
         valueListenable: _controller,
-        builder: (_, value, __) => ElevatedButton(
-          onPressed: value.text.trim().isEmpty ? null : _generate,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Resq.critical,
-            disabledBackgroundColor: Resq.surfaceAlt,
-            elevation: 0,
-            minimumSize: const Size.fromHeight(56),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(Resq.radiusControl),
-            ),
-          ),
-          child: Text(
-            'Generate report',
-            style: ResqType.button(
-              color: value.text.trim().isEmpty ? Resq.inkFaint : Colors.white,
-            ),
-          ),
-        ),
+        builder: (_, value, __) {
+          final empty = value.text.trim().isEmpty;
+          return ReportActions(
+            actions: [
+              ReportAction(
+                icon: Icons.backspace_rounded,
+                tooltip: 'Clear what you typed',
+                onPressed: empty ? null : _controller.clear,
+              ),
+              ReportAction(
+                icon: Icons.auto_awesome_rounded,
+                tooltip: 'Generate the report',
+                onPressed: empty ? null : _generate,
+                filled: true,
+              ),
+            ],
+          );
+        },
       ),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,

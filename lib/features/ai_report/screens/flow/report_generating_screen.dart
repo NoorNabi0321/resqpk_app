@@ -9,6 +9,7 @@ import '../../../../core/router/app_router.dart';
 import '../../../../core/theme/tokens.dart';
 import '../../../../core/theme/typography.dart';
 import '../../providers/ai_report_provider.dart';
+import 'report_actions.dart';
 import 'report_flow_chrome.dart';
 
 /// The wait.
@@ -78,37 +79,19 @@ class _ReportGeneratingScreenState extends ConsumerState<ReportGeneratingScreen>
       title: failed ? 'That did not work' : 'Building the report',
       onBack: failed ? () => context.pop() : null,
       bottomBar: failed
-          ? Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () => context.go(Routes.tracking),
-                    style: OutlinedButton.styleFrom(
-                      minimumSize: const Size.fromHeight(56),
-                      side: BorderSide(color: Resq.border),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(Resq.radiusControl),
-                      ),
-                    ),
-                    child: Text('Back to tracking', style: ResqType.button(color: Resq.inkSoft)),
-                  ),
+          ? ReportActions(
+              actions: [
+                ReportAction(
+                  icon: Icons.arrow_back_rounded,
+                  tooltip: 'Back to tracking',
+                  onPressed: () => context.go(Routes.tracking),
                 ),
-                const SizedBox(width: Resq.space3),
-                Expanded(
-                  flex: 2,
-                  child: ElevatedButton(
-                    onPressed: () =>
-                        ref.read(aiReportProvider.notifier).submitReport(widget.caseId),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Resq.critical,
-                      elevation: 0,
-                      minimumSize: const Size.fromHeight(56),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(Resq.radiusControl),
-                      ),
-                    ),
-                    child: Text('Try again', style: ResqType.button()),
-                  ),
+                ReportAction(
+                  icon: Icons.refresh_rounded,
+                  tooltip: 'Try again',
+                  onPressed: () =>
+                      ref.read(aiReportProvider.notifier).submitReport(widget.caseId),
+                  filled: true,
                 ),
               ],
             )

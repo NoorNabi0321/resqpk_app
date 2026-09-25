@@ -14,6 +14,7 @@ import '../../../auth/providers/auth_provider.dart';
 import '../../../sos/providers/session_provider.dart';
 import '../../data/ai_report_repository.dart';
 import '../../providers/ai_report_provider.dart';
+import 'report_actions.dart';
 import 'report_flow_chrome.dart';
 
 /// The finished report: what it says, and where it can go.
@@ -236,64 +237,26 @@ class _Actions extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Row(
-          children: [
-            Expanded(
-              flex: 2,
-              child: ElevatedButton.icon(
-                onPressed: sending ? null : onSend,
-                icon: sending
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2.2, color: Colors.white),
-                      )
-                    : Icon(
-                        sent ? Icons.check_rounded : Icons.local_hospital_rounded,
-                        size: 18,
-                        color: Colors.white,
-                      ),
-                label: Text(
-                  sent ? 'Sent to hospital' : 'Send to hospital',
-                  style: ResqType.button(),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: sent ? Resq.ready : Resq.critical,
-                  elevation: 0,
-                  minimumSize: const Size.fromHeight(56),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(Resq.radiusControl),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: Resq.space3),
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed: canShare ? onShare : null,
-                icon: const Icon(Icons.share_rounded, size: 18, color: Resq.brandInk),
-                label: Text('Share', style: ResqType.button(color: Resq.brandInk)),
-                style: OutlinedButton.styleFrom(
-                  minimumSize: const Size.fromHeight(56),
-                  side: BorderSide(color: Resq.brandInk.withValues(alpha: 0.5)),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(Resq.radiusControl),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-        TextButton.icon(
+    return ReportActions(
+      busy: sending,
+      actions: [
+        ReportAction(
+          icon: Icons.autorenew_rounded,
+          tooltip: 'Regenerate — this report is not accurate',
           onPressed: onRegenerate,
-          icon: const Icon(Icons.autorenew_rounded, size: 18, color: Resq.inkSoft),
-          label: Text(
-            'Regenerate — this is not accurate',
-            style: ResqType.button(color: Resq.inkSoft),
-          ),
+        ),
+        ReportAction(
+          icon: Icons.share_rounded,
+          tooltip: 'Share the report',
+          onPressed: canShare ? onShare : null,
+          color: Resq.brandInk,
+        ),
+        ReportAction(
+          icon: sent ? Icons.check_rounded : Icons.local_hospital_rounded,
+          tooltip: sent ? 'Sent to the hospital' : 'Send to the hospital',
+          onPressed: onSend,
+          filled: true,
+          color: sent ? Resq.ready : Resq.critical,
         ),
       ],
     );
