@@ -63,6 +63,10 @@ class ReportFlowScaffold extends StatelessWidget {
                     )
                   else
                     const SizedBox(width: Resq.space3),
+                  // The title gets the whole row. "Step 2 of 3" sat beside it
+                  // and pushed "Tell us what happened" into "Tell us what
+                  // happ…" — and the bar underneath was already saying the
+                  // same thing, in a form you do not have to read.
                   Expanded(
                     child: Text(
                       title,
@@ -71,8 +75,6 @@ class ReportFlowScaffold extends StatelessWidget {
                       style: ResqType.title(),
                     ),
                   ),
-                  if (step > 0)
-                    Text('Step $step of $totalSteps', style: ResqType.caption()),
                 ],
               ),
             ),

@@ -44,6 +44,8 @@ class ReportMethodScreen extends ConsumerWidget {
                     hint: 'Say it out loud in Urdu, Sindhi or English',
                     color: Resq.critical,
                     tint: Resq.criticalTint,
+                    solidIcon: false,
+                    waveform: true,
                     onTap: () => context.push(Routes.reportVoice, extra: caseId),
                   ),
                 ),
@@ -53,8 +55,9 @@ class ReportMethodScreen extends ConsumerWidget {
                     icon: Icons.keyboard_rounded,
                     label: 'Type',
                     hint: 'Write it in English, Urdu or Roman Urdu',
-                    color: Resq.info,
-                    tint: Resq.infoTint,
+                    color: Resq.ready,
+                    tint: Resq.readyTint,
+                    solidIcon: true,
                     onTap: () => context.push(Routes.reportText, extra: caseId),
                   ),
                 ),
@@ -101,6 +104,8 @@ class _MethodButton extends StatelessWidget {
     required this.color,
     required this.tint,
     required this.onTap,
+    this.solidIcon = false,
+    this.waveform = false,
   });
 
   final IconData icon;
@@ -110,44 +115,158 @@ class _MethodButton extends StatelessWidget {
   final Color tint;
   final VoidCallback onTap;
 
+  /// White glyph on a filled disc, rather than a coloured glyph on a tinted one.
+  final bool solidIcon;
+
+  /// Bars either side of the microphone — the one thing on the screen that
+  /// says "this listens" before a word of the label is read.
+  final bool waveform;
+
   @override
   Widget build(BuildContext context) {
     return Material(
       color: tint,
-      borderRadius: BorderRadius.circular(Resq.radiusCard),
+      borderRadius: BorderRadius.circular(20),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(Resq.radiusCard),
+        borderRadius: BorderRadius.circular(20),
         child: Container(
           width: double.infinity,
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(Resq.radiusCard),
-            border: Border.all(color: color.withValues(alpha: 0.35)),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: color.withValues(alpha: 0.45)),
           ),
-          padding: const EdgeInsets.all(Resq.space5),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
+          clipBehavior: Clip.antiAlias,
+          child: Stack(
             children: [
-              Container(
-                width: 64,
-                height: 64,
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.16),
-                  shape: BoxShape.circle,
+              // A soft swell in the bottom corner. It keeps a large flat card
+              // from reading as an empty panel.
+              Positioned(
+                right: -56,
+                bottom: -64,
+                child: Container(
+                  width: 210,
+                  height: 190,
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.10),
+                    borderRadius: BorderRadius.circular(110),
+                  ),
                 ),
-                child: Icon(icon, size: 30, color: color),
               ),
-              const SizedBox(height: Resq.space3),
-              Text(label, style: ResqType.title(color: color)),
-              const SizedBox(height: 4),
-              Text(
-                hint,
-                textAlign: TextAlign.center,
-                style: ResqType.caption(color: Resq.inkSoft),
+              Positioned(
+                right: -90,
+                bottom: -40,
+                child: Container(
+                  width: 190,
+                  height: 150,
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.07),
+                    borderRadius: BorderRadius.circular(100),
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(Resq.space5),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        if (waveform) _Waveform(color: color, mirrored: false),
+                        _IconDisc(icon: icon, color: color, solid: solidIcon),
+                        if (waveform) _Waveform(color: color, mirrored: true),
+                      ],
+                    ),
+                    const SizedBox(height: Resq.space3),
+                    Text(
+                      label,
+                      // Darkened against its own tint. The green at full
+                      // strength is only 2.8:1 on the mint, which is under the
+                      // 3:1 large text needs — and the reference sets it in a
+                      // deeper green for exactly that reason.
+                      style: ResqType.display(
+                        color: Color.lerp(color, const Color(0xFF1C1917), 0.28)!,
+                      ).copyWith(fontSize: 30),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      hint,
+                      textAlign: TextAlign.center,
+                      style: ResqType.body(color: Resq.inkSoft).copyWith(fontSize: 14),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// The glyph, on a disc, inside a halo — so the eye lands there first.
+class _IconDisc extends StatelessWidget {
+  const _IconDisc({required this.icon, required this.color, required this.solid});
+
+  final IconData icon;
+  final Color color;
+  final bool solid;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 108,
+      height: 108,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.10),
+        shape: BoxShape.circle,
+      ),
+      child: Container(
+        width: 74,
+        height: 74,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: solid ? color : color.withValues(alpha: 0.22),
+          shape: BoxShape.circle,
+        ),
+        child: Icon(icon, size: 34, color: solid ? Colors.white : color),
+      ),
+    );
+  }
+}
+
+class _Waveform extends StatelessWidget {
+  const _Waveform({required this.color, required this.mirrored});
+
+  final Color color;
+  final bool mirrored;
+
+  static const _heights = [14.0, 30.0, 20.0];
+
+  @override
+  Widget build(BuildContext context) {
+    final bars = mirrored ? _heights.reversed.toList() : _heights;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: Resq.space2),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (var i = 0; i < bars.length; i++) ...[
+            if (i > 0) const SizedBox(width: 5),
+            Container(
+              width: 5,
+              height: bars[i],
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.55),
+                borderRadius: BorderRadius.circular(Resq.radiusPill),
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }
