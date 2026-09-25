@@ -639,9 +639,18 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
             ),
 
             // --- The card that actually tells you what is happening -----------
-            Align(
-              alignment: Alignment.bottomCenter,
-              child: _TrackingCard(
+            // Draggable, because the map underneath is half the point. Pull the
+            // sheet down to see where the ambulance actually is, push it back
+            // up for the hospital and the buttons. It snaps to three heights
+            // so it never rests somewhere useless.
+            DraggableScrollableSheet(
+              initialChildSize: 0.46,
+              minChildSize: 0.17,
+              maxChildSize: 0.92,
+              snap: true,
+              snapSizes: const [0.17, 0.46, 0.92],
+              builder: (context, scrollController) => _TrackingCard(
+                scrollController: scrollController,
                 status: sos.status,
                 driverName: c.driverName,
                 vehicleNumber: c.vehicleNumber,
@@ -849,6 +858,7 @@ class _RequestCodeChip extends ConsumerWidget {
 /// that had lost the request.
 class _TrackingCard extends StatelessWidget {
   const _TrackingCard({
+    required this.scrollController,
     required this.status,
     required this.driverName,
     required this.vehicleNumber,
@@ -870,6 +880,10 @@ class _TrackingCard extends StatelessWidget {
     required this.onChangeHospital,
     required this.onConfirmHospital,
   });
+
+  /// Supplied by the sheet. Everything in the card scrolls with it, so a drag
+  /// anywhere on the card moves the sheet — not just on the handle.
+  final ScrollController scrollController;
 
   final SOSStatus status;
   final String? driverName;
@@ -904,10 +918,14 @@ class _TrackingCard extends StatelessWidget {
       child: SafeArea(
         top: false,
         child: SingleChildScrollView(
+          controller: scrollController,
+          // Always scrollable, so the sheet still follows a drag when the card
+          // is shorter than the space it has been given.
+          physics: const AlwaysScrollableScrollPhysics(),
           child: Padding(
             padding: const EdgeInsets.fromLTRB(
               Resq.space5,
-              Resq.space4,
+              Resq.space3,
               Resq.space5,
               Resq.space4,
             ),
@@ -915,17 +933,20 @@ class _TrackingCard extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                // The grip. It is the thing people reach for, so it sits in a
+                // tall enough row to be caught by a thumb rather than aimed at.
                 Center(
                   child: Container(
-                    width: 40,
-                    height: 4,
+                    width: 44,
+                    height: 5,
+                    margin: const EdgeInsets.only(bottom: Resq.space3),
                     decoration: BoxDecoration(
-                      color: Resq.border,
+                      color: Resq.inkFaint.withValues(alpha: 0.45),
                       borderRadius: BorderRadius.circular(Resq.radiusPill),
                     ),
                   ),
                 ),
-                const SizedBox(height: Resq.space4),
+                const SizedBox(height: Resq.space2),
 
                 if (hasDriver) ..._assigned(context) else ..._searching(context),
 
@@ -968,14 +989,6 @@ class _TrackingCard extends StatelessWidget {
                     onPressed: onAiReport,
                     height: 52,
                   ),
-                const SizedBox(height: 2),
-                Text(
-                  hasReport
-                      ? 'Sent to the hospital. Tap to read or share it.'
-                      : 'Photo and voice → a report the hospital reads before you arrive',
-                  textAlign: TextAlign.center,
-                  style: ResqType.micro(),
-                ),
                 TextButton(
                   onPressed: onCancel,
                   child: Text('Cancel emergency', style: ResqType.button(color: Resq.critical)),
