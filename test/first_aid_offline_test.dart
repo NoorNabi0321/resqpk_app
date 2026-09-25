@@ -77,14 +77,46 @@ void main() {
     }
   });
 
-  test('Urdu is present, and in Urdu script', () {
-    final urdu = guides.where((g) => (g.titleUr ?? '').isNotEmpty).toList();
-    expect(urdu, isNotEmpty, reason: 'the app offers an Urdu toggle');
+  // U+0600–U+06FF is the Arabic block Urdu is written in. Latin text here
+  // would mean the translation was lost somewhere in the export — or never
+  // written, and the English quietly took its place.
+  bool inUrduScript(String s) => s.runes.any((r) => r >= 0x0600 && r <= 0x06FF);
 
-    // U+0600–U+06FF is the Arabic block Urdu is written in. A Latin string
-    // here would mean the translation was lost somewhere in the export.
-    final hasUrduScript = urdu.first.titleUr!.runes.any((r) => r >= 0x0600 && r <= 0x06FF);
-    expect(hasUrduScript, isTrue);
+  test('every guide answers the Urdu toggle', () {
+    // getSteps() falls back to English when stepsUr is empty, so a missing
+    // translation does not throw or show a gap — it hands back the English
+    // steps and the reader has no way to tell the toggle did nothing. Four
+    // guides shipped like that. Only a test at the data can catch it.
+    for (final guide in guides) {
+      expect(guide.titleUr?.trim() ?? '', isNotEmpty,
+          reason: '${guide.slug} has no Urdu title');
+      expect(inUrduScript(guide.titleUr!), isTrue,
+          reason: '${guide.slug} title_ur is not in Urdu script');
+
+      expect(guide.stepsUr ?? [], isNotEmpty,
+          reason: '${guide.slug} has no Urdu steps — the toggle shows English');
+      expect(guide.stepsUr!.length, guide.stepsEn.length,
+          reason: '${guide.slug} has ${guide.stepsUr!.length} Urdu steps '
+              'against ${guide.stepsEn.length} English');
+    }
+  });
+
+  test('every Urdu step is written, numbered and in script', () {
+    for (final guide in guides) {
+      for (var i = 0; i < guide.stepsUr!.length; i++) {
+        final step = guide.stepsUr![i];
+        final where = '${guide.slug} Urdu step ${i + 1}';
+
+        expect(step.title.trim(), isNotEmpty, reason: '$where has no title');
+        expect(step.instruction.trim(), isNotEmpty, reason: '$where is blank');
+        expect(inUrduScript(step.instruction), isTrue,
+            reason: '$where is not in Urdu script');
+        // The slider renders by position but labels by step number; a guide
+        // translated out of order would put step 4's words under step 2.
+        expect(step.step, guide.stepsEn[i].step,
+            reason: '$where does not line up with the English it mirrors');
+      }
+    }
   });
 
   test('artwork lines up with the guides that have it', () {
