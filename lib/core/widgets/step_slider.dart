@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -92,6 +94,9 @@ class _StepSliderState extends State<StepSlider> {
           ),
           _StepPanel(
             step: step,
+            // Every instruction in the guide, so the panel can size itself to
+            // the longest one and then stay put.
+            instructions: [for (final s in widget.steps) s.instruction],
             index: _index,
             total: widget.steps.length,
             rtl: widget.rtl,
@@ -172,9 +177,14 @@ class _NumberPlaceholder extends StatelessWidget {
 /// Dark because the illustration above it is bright and full of white: a light
 /// card underneath made the two blur together, and the words are what someone
 /// is actually trying to read.
+///
+/// Its height is fixed across the guide. A panel that grew and shrank with each
+/// instruction moved the arrows under your thumb between steps, and resized the
+/// illustration every time you swiped.
 class _StepPanel extends StatelessWidget {
   const _StepPanel({
     required this.step,
+    required this.instructions,
     required this.index,
     required this.total,
     required this.rtl,
@@ -183,6 +193,7 @@ class _StepPanel extends StatelessWidget {
   });
 
   final StepSliderItem step;
+  final List<String> instructions;
   final int index;
   final int total;
   final bool rtl;
@@ -249,15 +260,10 @@ class _StepPanel extends StatelessWidget {
                         const SizedBox(height: Resq.space2),
                         // Cream on navy: the same warm paper colour the rest of
                         // the app is written on, so the voice does not change.
-                        Text(
-                          step.instruction,
-                          textAlign: TextAlign.center,
-                          style: rtl
-                              ? ResqType.nastaliq(size: 16, color: Resq.canvas)
-                              : ResqType.body(color: Resq.canvas).copyWith(
-                                  fontSize: 16,
-                                  height: 1.5,
-                                ),
+                        _Instruction(
+                          text: step.instruction,
+                          all: instructions,
+                          rtl: rtl,
                         ),
                       ],
                     ),
@@ -273,6 +279,57 @@ class _StepPanel extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// The instruction, in a box as tall as the guide's longest instruction.
+///
+/// Measured rather than guessed at a line count: the guides run from four words
+/// to three sentences, and Urdu sets taller than English at the same size, so a
+/// hard-coded height would either clip Urdu or leave a gap under English.
+class _Instruction extends StatelessWidget {
+  const _Instruction({required this.text, required this.all, required this.rtl});
+
+  final String text;
+
+  /// Every instruction in the guide, including this one.
+  final List<String> all;
+  final bool rtl;
+
+  @override
+  Widget build(BuildContext context) {
+    final style = rtl
+        ? ResqType.nastaliq(size: 16, color: Resq.canvas)
+        : ResqType.body(color: Resq.canvas).copyWith(fontSize: 16, height: 1.5);
+    final direction = rtl ? TextDirection.rtl : TextDirection.ltr;
+    final scaler = MediaQuery.textScalerOf(context);
+    // A guide with one very long step should not eat the illustration; past
+    // this the text scrolls instead of pushing the picture off the screen.
+    final ceiling = MediaQuery.sizeOf(context).height * 0.3;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        var tallest = 0.0;
+        for (final candidate in all) {
+          final painter = TextPainter(
+            text: TextSpan(text: candidate, style: style),
+            textAlign: TextAlign.center,
+            textDirection: direction,
+            textScaler: scaler,
+          )..layout(maxWidth: constraints.maxWidth);
+          tallest = math.max(tallest, painter.height);
+          painter.dispose();
+        }
+
+        return SizedBox(
+          width: double.infinity,
+          height: math.min(tallest, ceiling),
+          child: SingleChildScrollView(
+            child: Text(text, textAlign: TextAlign.center, style: style),
+          ),
+        );
+      },
     );
   }
 }
