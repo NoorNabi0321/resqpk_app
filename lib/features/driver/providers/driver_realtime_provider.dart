@@ -25,28 +25,50 @@ class DriverOnlineState {
   final Position? currentPosition;
   final String? error;
 
+  /// Whether dispatch can actually offer this driver a case.
+  ///
+  /// Not the same as [isOnline], and that gap is the whole point. The server
+  /// refuses availability while a driver still holds an unfinished case, so a
+  /// driver could sit on an "On duty" screen, connected and broadcasting, and
+  /// be invisible to every dispatch ring. The app believed success:true meant
+  /// on duty and never asked.
+  final bool isAvailable;
+
+  /// The case number keeping this driver out of dispatch, when there is one.
+  final String? heldCaseNumber;
+
   const DriverOnlineState({
     this.isOnline = false,
     this.isBroadcasting = false,
     this.isLoading = false,
+    this.isAvailable = false,
     this.currentPosition,
     this.error,
+    this.heldCaseNumber,
   });
+
+  /// On duty, but dispatch cannot reach them — worth saying out loud.
+  bool get isOnlineButUnreachable => isOnline && !isAvailable;
 
   DriverOnlineState copyWith({
     bool? isOnline,
     bool? isBroadcasting,
     bool? isLoading,
+    bool? isAvailable,
     Position? currentPosition,
     String? error,
+    String? heldCaseNumber,
     bool clearError = false,
+    bool clearHeldCase = false,
   }) {
     return DriverOnlineState(
       isOnline: isOnline ?? this.isOnline,
       isBroadcasting: isBroadcasting ?? this.isBroadcasting,
       isLoading: isLoading ?? this.isLoading,
+      isAvailable: isAvailable ?? this.isAvailable,
       currentPosition: currentPosition ?? this.currentPosition,
       error: clearError ? null : (error ?? this.error),
+      heldCaseNumber: clearHeldCase ? null : (heldCaseNumber ?? this.heldCaseNumber),
     );
   }
 }
@@ -127,11 +149,21 @@ class DriverOnlineNotifier extends StateNotifier<DriverOnlineState> {
       }
 
       await _broadcaster.startBroadcasting();
+
+      // Older builds of the server answer with success alone. Treating a
+      // missing field as available keeps this working against them, rather
+      // than showing every driver as unreachable.
+      final available = res['isAvailable'] != false;
+      final held = res['heldCase'] as Map?;
+
       state = state.copyWith(
         isLoading: false,
         isOnline: true,
         isBroadcasting: true,
+        isAvailable: available,
         currentPosition: position,
+        heldCaseNumber: held?['caseNumber']?.toString(),
+        clearHeldCase: available,
       );
     } catch (e) {
       state = state.copyWith(
@@ -146,7 +178,13 @@ class DriverOnlineNotifier extends StateNotifier<DriverOnlineState> {
     try {
       _broadcaster.stopBroadcasting();
       await _socketService.emitDriverGoOffline();
-      state = state.copyWith(isLoading: false, isOnline: false, isBroadcasting: false);
+      state = state.copyWith(
+        isLoading: false,
+        isOnline: false,
+        isBroadcasting: false,
+        isAvailable: false,
+        clearHeldCase: true,
+      );
     } catch (e) {
       state = state.copyWith(isLoading: false, error: e.toString());
     }

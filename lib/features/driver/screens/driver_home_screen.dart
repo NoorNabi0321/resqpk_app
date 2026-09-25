@@ -163,6 +163,20 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
                         driverState.isOnline ? notifier.goOffline() : notifier.goOnline();
                       },
               ),
+              // On duty is not the same as reachable. The server keeps a driver
+              // out of dispatch while they hold an unfinished case, and this
+              // screen used to show a confident "On duty" over the top of it
+              // while every patient nearby got "no driver found".
+              if (driverState.isOnlineButUnreachable)
+                _Warning(
+                  icon: Icons.person_off_rounded,
+                  text: driverState.heldCaseNumber == null
+                      ? 'You are on duty, but dispatch cannot send you a case yet. '
+                          'An earlier run is still open.'
+                      : 'You are on duty, but dispatch cannot send you a case: '
+                          '${driverState.heldCaseNumber} is still open. It clears '
+                          'by itself once it goes stale.',
+                ),
               const SizedBox(height: Resq.space4),
               _GpsCard(position: position, broadcasting: driverState.isBroadcasting),
               const SizedBox(height: Resq.space4),
