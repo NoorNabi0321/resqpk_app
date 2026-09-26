@@ -54,6 +54,12 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
 
     if (result == 'accepted') {
       context.go(Routes.driverNavigation, extra: request.caseId);
+    } else if (result == 'cancelled') {
+      // Said plainly, because the alternative reading — that another driver
+      // beat them to it — is the one the expired message used to give.
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('The patient cancelled before you answered')),
+      );
     } else if (result == 'expired') {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Request expired — another ambulance took it')),

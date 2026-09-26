@@ -3,9 +3,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../../../core/map/resqpk_map.dart';
+import '../../../core/realtime/realtime_provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/tokens.dart';
 import '../../../core/theme/typography.dart';
@@ -27,19 +29,21 @@ const List<({String key, String label, IconData icon})> kDeclineReasons = [
 ];
 
 /// Full-screen interrupt when a dispatch request arrives.
-/// Pops with 'accepted' | 'declined' | 'timeout' | 'expired' | 'error'.
-class DispatchRequestScreen extends StatefulWidget {
+/// Pops with 'accepted' | 'declined' | 'timeout' | 'expired' | 'error'
+/// | 'cancelled'.
+class DispatchRequestScreen extends ConsumerStatefulWidget {
   const DispatchRequestScreen({super.key, required this.request});
 
   final DispatchRequestModel request;
 
   @override
-  State<DispatchRequestScreen> createState() => _DispatchRequestScreenState();
+  ConsumerState<DispatchRequestScreen> createState() => _DispatchRequestScreenState();
 }
 
-class _DispatchRequestScreenState extends State<DispatchRequestScreen> {
+class _DispatchRequestScreenState extends ConsumerState<DispatchRequestScreen> {
   final SOSRepository _repo = SOSRepository();
   Timer? _timer;
+  StreamSubscription<Map<String, dynamic>>? _caseEvtSub;
   int _remainingMs = 0;
   bool _busy = false;
 
@@ -53,12 +57,38 @@ class _DispatchRequestScreenState extends State<DispatchRequestScreen> {
       setState(() => _remainingMs -= 100);
       if (_remainingMs <= 0) _respondAndPop('declined', 'timeout');
     });
+
+    // The patient can call it off while this is still counting down. Without
+    // this the offer stayed up for the rest of the fifteen seconds, and a
+    // driver who accepted in that window was told "another ambulance took it"
+    // — the wrong reason for the right outcome, and one that makes the app
+    // look like it lost a race it was never in.
+    _caseEvtSub = ref.read(socketServiceProvider).caseUpdateStream.listen((data) {
+      if (!mounted) return;
+      if (data['event']?.toString() != 'cancelled') return;
+      // Another case entirely — a stale room, or one this driver is not being
+      // offered — must not close this offer.
+      final caseId = data['caseId']?.toString();
+      if (caseId != null && caseId != widget.request.caseId) return;
+      _popCancelled();
+    });
   }
 
   @override
   void dispose() {
     _timer?.cancel();
+    _caseEvtSub?.cancel();
     super.dispose();
+  }
+
+  /// Close the offer without answering it. There is nothing left to accept or
+  /// decline, and the server has already freed this driver.
+  void _popCancelled() {
+    if (_busy) return;
+    _busy = true;
+    _timer?.cancel();
+    HapticFeedback.mediumImpact();
+    Navigator.of(context).pop('cancelled');
   }
 
   Future<void> _respondAndPop(String response, String popResult, {String? reason}) async {
