@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -53,7 +55,13 @@ class NoDriverScreen extends ConsumerWidget {
               Center(
                 child: Image.asset(
                   AppAssets.stateNoDriver,
-                  height: 160,
+                  // The picture carries the bad news before the heading does,
+                  // and at a flat 160 it sat in the middle of the screen
+                  // looking incidental. A share of the screen rather than a
+                  // number, because at 220 on a 640pt phone it pushed three of
+                  // the four numbers below the fold — and those numbers are
+                  // the entire reason for this screen.
+                  height: math.min(220, MediaQuery.sizeOf(context).height * 0.24),
                   fit: BoxFit.contain,
                   errorBuilder: (_, __, ___) => const Icon(
                     Icons.no_transfer_rounded,

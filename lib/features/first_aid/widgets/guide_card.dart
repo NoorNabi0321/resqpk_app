@@ -53,9 +53,13 @@ const Map<String, ({IconData icon, Color color, Color tint})> _badges = {
 const _fallbackBadge =
     (icon: Icons.medical_services_rounded, color: Resq.brandInk, tint: Resq.brandTint);
 
-/// A shade lighter than the page, so a card lifts off the cream without
-/// becoming the white of a form field.
-const Color _cardCream = Color(0xFFFCF8F2);
+/// The same ground as every other card in the app — the emergency numbers on
+/// the no-driver screen, the hospital rows, the tracking sheet.
+///
+/// It used to be #FCF8F2, a shade off white, on the theory that a card should
+/// lift off the cream page without becoming a form field. Against the canvas
+/// it read as grey, and grey is what a disabled control looks like.
+const Color _cardCream = Resq.surface;
 
 String guideBlurb(FirstAidGuideModel guide, String language) {
   final table = language == 'ur' ? _whenToUseUr : _whenToUse;
@@ -106,8 +110,14 @@ class GuideCard extends StatelessWidget {
             // picture on the left. Half-mirrored layouts read as broken.
             textDirection: urdu ? TextDirection.rtl : TextDirection.ltr,
             child: Container(
-              height: urdu ? 128 : 106,
-              padding: const EdgeInsets.fromLTRB(Resq.space3, Resq.space2, 0, Resq.space2),
+              // Taller, and the artwork runs the full height of it. The cover
+              // is the fastest way to recognise a guide while scrolling, and
+              // at the old size it was a thumbnail of a thumbnail.
+              height: urdu ? 144 : 124,
+              // Four points top and bottom so the tallest cover — eye injury,
+              // which is nearly square — clears the corner radius instead of
+              // being shaved by it. The picture still runs to the right edge.
+              padding: const EdgeInsets.fromLTRB(Resq.space3, 4, 0, 4),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(Resq.radiusCard),
                 border: Border.all(color: Resq.border),
@@ -123,8 +133,11 @@ class GuideCard extends StatelessWidget {
                     child: Icon(badge.icon, size: 20, color: badge.color),
                   ),
                   const SizedBox(width: Resq.space3),
+                  // Text gives up a share to the picture: 5:3 became 4:4, and
+                  // the type comes down a point with it. The words are read
+                  // second — the picture is what the eye lands on.
                   Expanded(
-                    flex: 5,
+                    flex: 4,
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -134,8 +147,8 @@ class GuideCard extends StatelessWidget {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: urdu
-                              ? ResqType.nastaliq(size: 16)
-                              : ResqType.bodyStrong().copyWith(fontSize: 16),
+                              ? ResqType.nastaliq(size: 15)
+                              : ResqType.bodyStrong().copyWith(fontSize: 15),
                         ),
                         const SizedBox(height: 2),
                         Text(
@@ -143,8 +156,8 @@ class GuideCard extends StatelessWidget {
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: urdu
-                              ? ResqType.nastaliq(size: 12, color: Resq.inkSoft)
-                              : ResqType.caption(color: Resq.inkSoft).copyWith(fontSize: 12.5),
+                              ? ResqType.nastaliq(size: 11, color: Resq.inkSoft)
+                              : ResqType.caption(color: Resq.inkSoft).copyWith(fontSize: 11.5),
                         ),
                         const SizedBox(height: 5),
                         _MetaRow(steps: steps, illustrated: cover != null, urdu: urdu),
@@ -153,7 +166,7 @@ class GuideCard extends StatelessWidget {
                   ),
                   const SizedBox(width: Resq.space2),
                   Expanded(
-                    flex: 3,
+                    flex: 4,
                     child: _Cover(path: cover, badge: badge),
                   ),
                 ],
