@@ -34,8 +34,6 @@ class SOSState {
   final bool isSosCountingDown;
 
   /// v2 — the destination hospital's decision: 'awaiting_review' | 'accepted'.
-  final String hospitalDecision;
-  final String? hospitalPreparationNote;
 
   const SOSState({
     this.activeCaseId,
@@ -45,11 +43,8 @@ class SOSState {
     this.error,
     this.sosCountdownSeconds = 10,
     this.isSosCountingDown = false,
-    this.hospitalDecision = 'awaiting_review',
-    this.hospitalPreparationNote,
   });
 
-  bool get isHospitalConfirmed => hospitalDecision == 'accepted';
 
   SOSState copyWith({
     String? activeCaseId,
@@ -59,10 +54,7 @@ class SOSState {
     String? error,
     int? sosCountdownSeconds,
     bool? isSosCountingDown,
-    String? hospitalDecision,
-    String? hospitalPreparationNote,
     bool clearError = false,
-    bool clearPreparationNote = false,
   }) {
     return SOSState(
       activeCaseId: activeCaseId ?? this.activeCaseId,
@@ -72,10 +64,6 @@ class SOSState {
       error: clearError ? null : (error ?? this.error),
       sosCountdownSeconds: sosCountdownSeconds ?? this.sosCountdownSeconds,
       isSosCountingDown: isSosCountingDown ?? this.isSosCountingDown,
-      hospitalDecision: hospitalDecision ?? this.hospitalDecision,
-      hospitalPreparationNote: clearPreparationNote
-          ? null
-          : (hospitalPreparationNote ?? this.hospitalPreparationNote),
     );
   }
 }
@@ -262,9 +250,6 @@ class SOSNotifier extends StateNotifier<SOSState> {
           break;
         case 'hospital_changed':
           state = state.copyWith(
-            // Whoever gains the case must review it from scratch.
-            hospitalDecision: 'awaiting_review',
-            clearPreparationNote: true,
             activeCase: state.activeCase?.copyWith(
               hospitalId: data['hospitalId']?.toString(),
               hospitalName: data['hospitalName']?.toString(),
@@ -289,29 +274,6 @@ class SOSNotifier extends StateNotifier<SOSState> {
               estimatedDriverArrivalSeconds: data['etaSeconds'] is int
                   ? data['etaSeconds']
                   : int.tryParse('${data['etaSeconds']}'),
-            ),
-          );
-          break;
-        // v2 — the hospital accepted this patient.
-        case 'hospital_accepted':
-          state = state.copyWith(
-            hospitalDecision: 'accepted',
-            hospitalPreparationNote: data['preparationNote']?.toString(),
-          );
-          break;
-        // v2 — the hospital sent the case elsewhere. The patient sees the new
-        // destination, never the clinical reason.
-        case 'hospital_redirected':
-          final newHospital = data['newHospital'] as Map<String, dynamic>?;
-          state = state.copyWith(
-            hospitalDecision: 'awaiting_review',
-            hospitalPreparationNote: null,
-            clearPreparationNote: true,
-            activeCase: state.activeCase?.copyWith(
-              hospitalId: newHospital?['id']?.toString(),
-              hospitalName: newHospital?['name']?.toString(),
-              hospitalLat: _toD(newHospital?['lat']),
-              hospitalLng: _toD(newHospital?['lng']),
             ),
           );
           break;
@@ -435,8 +397,6 @@ class SOSNotifier extends StateNotifier<SOSState> {
       activeCaseId: activeCase.id,
       activeCase: activeCase,
       status: statusByName[activeCase.status] ?? SOSStatus.searching,
-      hospitalDecision: activeCase.hospitalDecision ?? 'awaiting_review',
-      hospitalPreparationNote: activeCase.preparationNote,
       isLoading: false,
       clearError: true,
     );
@@ -461,9 +421,6 @@ class SOSNotifier extends StateNotifier<SOSState> {
   void applyHospitalChange({String? id, String? name, double? lat, double? lng}) {
     if (state.activeCase == null) return;
     state = state.copyWith(
-      // A newly chosen hospital has not accepted anything yet.
-      hospitalDecision: 'awaiting_review',
-      clearPreparationNote: true,
       activeCase: state.activeCase!.copyWith(
         hospitalId: id,
         hospitalName: name,

@@ -231,8 +231,6 @@ class SocketService {
     socket.on(SocketEvents.hospitalChanged, (d) => _emitCaseUpdate('hospital_changed', d));
 
     // v2 hospital decisions — driver and patient both listen in the case room.
-    socket.on(SocketEvents.caseAccepted, (d) => _emitCaseUpdate('hospital_accepted', d));
-    socket.on(SocketEvents.caseRedirected, (d) => _emitCaseUpdate('hospital_redirected', d));
     socket.on(SocketEvents.quickMessage, (d) => _emitCaseUpdate('quick_message', d));
 
     // Ambulance handover.

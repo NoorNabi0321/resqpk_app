@@ -112,31 +112,6 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
           ));
           break;
 
-        case 'hospital_accepted':
-          final note = data['preparationNote']?.toString();
-          _addUpdate(_CaseUpdate(
-            kind: _UpdateKind.accepted,
-            title: '${data['hospitalName'] ?? 'The hospital'} confirmed',
-            body: note != null && note.isNotEmpty
-                ? 'They are ready for you — $note.'
-                : 'They are expecting you and preparing for your arrival.',
-            at: DateTime.now(),
-          ));
-          break;
-
-        case 'hospital_redirected':
-          final newHospital = data['newHospital'] as Map<String, dynamic>?;
-          final name = newHospital?['name']?.toString() ?? 'another hospital';
-          _addUpdate(_CaseUpdate(
-            kind: _UpdateKind.hospital,
-            // The clinical reason stays with the driver and the records.
-            title: 'Hospital changed to $name',
-            body: 'You are being taken here for better care availability.',
-            at: DateTime.now(),
-          ));
-          _fetchRoute();
-          break;
-
         case 'driver_changed':
           final driver = data['driver'] as Map<String, dynamic>?;
           final name = driver?['fullName']?.toString() ?? 'another driver';
@@ -662,8 +637,6 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
                 progress: progress,
                 hospitalName: c.hospitalName,
                 hospitalSelected: c.hospitalId != null,
-                hospitalConfirmed: sos.isHospitalConfirmed,
-                preparationNote: sos.hospitalPreparationNote,
                 hasDriver: c.driverId != null,
                 hasReport: _latestReport != null ||
                     (ref.watch(aiReportProvider).report?.isComplete ?? false),
@@ -933,8 +906,6 @@ class _TrackingCard extends StatelessWidget {
     required this.progress,
     required this.hospitalName,
     required this.hospitalSelected,
-    required this.hospitalConfirmed,
-    required this.preparationNote,
     required this.hasDriver,
     required this.hasReport,
     required this.suggestedHospital,
@@ -959,8 +930,6 @@ class _TrackingCard extends StatelessWidget {
   final double progress;
   final String? hospitalName;
   final bool hospitalSelected;
-  final bool hospitalConfirmed;
-  final String? preparationNote;
   final bool hasDriver;
   final bool hasReport;
   final Map<String, dynamic>? suggestedHospital;
@@ -1030,8 +999,6 @@ class _TrackingCard extends StatelessWidget {
                 else
                   _HospitalRow(
                     name: hospitalName ?? 'Hospital',
-                    confirmed: hospitalConfirmed,
-                    preparationNote: preparationNote,
                     onChange: onChangeHospital,
                   ),
 
@@ -1279,59 +1246,56 @@ class _HospitalChoice extends StatelessWidget {
 class _HospitalRow extends StatelessWidget {
   const _HospitalRow({
     required this.name,
-    required this.confirmed,
-    required this.preparationNote,
     required this.onChange,
   });
 
   final String name;
-  final bool confirmed;
-  final String? preparationNote;
   final VoidCallback onChange;
 
   @override
   Widget build(BuildContext context) {
+    // Always the settled green. The patient used to wait here on an amber
+    // "Waiting for the hospital to accept", which could still turn into being
+    // sent somewhere else — an unanswerable question while lying in an
+    // ambulance. The ward is told what is coming and gets ready for it.
     return ResqCard(
       padding: const EdgeInsets.all(Resq.space3),
-      accent: confirmed ? Resq.ready : Resq.decision,
+      accent: Resq.ready,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(
-                Icons.local_hospital_rounded,
-                color: confirmed ? Resq.ready : Resq.decision,
-                size: 18,
-              ),
+              const Icon(Icons.local_hospital_rounded, color: Resq.ready, size: 18),
               const SizedBox(width: Resq.space2),
               Expanded(child: Text(name, style: ResqType.bodyStrong())),
-              if (confirmed)
-                StatusPill.ready('Expecting you')
-                    .animate()
-                    .scale(duration: 300.ms, curve: Curves.easeOutBack)
-              else
+              StatusPill.ready('Expecting you')
+                  .animate()
+                  .scale(duration: 300.ms, curve: Curves.easeOutBack),
+            ],
+          ),
+          Padding(
+            padding: const EdgeInsets.only(top: 4, left: 26),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'They know you are coming and are preparing for you.',
+                    style: ResqType.caption(),
+                  ),
+                ),
                 TextButton(
                   onPressed: onChange,
                   style: TextButton.styleFrom(
                     padding: const EdgeInsets.symmetric(horizontal: Resq.space2),
-                    minimumSize: const Size(0, 36),
+                    minimumSize: const Size(0, 32),
                     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   ),
                   child: Text('Change', style: ResqType.caption(color: Resq.brandInk)),
                 ),
-            ],
+              ],
+            ),
           ),
-          if (!confirmed)
-            Padding(
-              padding: const EdgeInsets.only(top: 4, left: 26),
-              child: Text('Waiting for the hospital to accept', style: ResqType.caption()),
-            ),
-          if (confirmed && (preparationNote?.isNotEmpty ?? false))
-            Padding(
-              padding: const EdgeInsets.only(top: 6, left: 26),
-              child: Text(preparationNote!, style: ResqType.caption(color: Resq.inkSoft)),
-            ),
         ],
       ),
     );

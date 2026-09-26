@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -48,11 +47,6 @@ class _DriverNavigationScreenState extends ConsumerState<DriverNavigationScreen>
   bool _fetchingRoute = false;
   StreamSubscription<Map<String, dynamic>>? _caseEvtSub;
 
-  // v2 — hospital decision state.
-  String _decision = 'awaiting_review';
-  String? _acceptedHospitalName;
-  String? _preparationNote;
-
   // v2 — quick messages.
   List<QuickMessage> _driverMessages = [];
   final List<CaseMessage> _messageLog = [];
@@ -91,19 +85,6 @@ class _DriverNavigationScreenState extends ConsumerState<DriverNavigationScreen>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Hospital changed to ${data['hospitalName'] ?? 'a new hospital'}')),
         );
-        break;
-
-      case 'hospital_accepted':
-        HapticFeedback.mediumImpact();
-        setState(() {
-          _decision = 'accepted';
-          _acceptedHospitalName = data['hospitalName']?.toString();
-          _preparationNote = data['preparationNote']?.toString();
-        });
-        break;
-
-      case 'hospital_redirected':
-        _showRedirectAlert(data);
         break;
 
       // The patient called it off. Without this the driver was left on a map,
@@ -399,116 +380,6 @@ class _DriverNavigationScreenState extends ConsumerState<DriverNavigationScreen>
   }
 
   // A redirect changes where this ambulance is going — it must be acknowledged,
-  // so the alert is full-screen and cannot be dismissed by tapping away.
-  void _showRedirectAlert(Map<String, dynamic> data) {
-    final newHospital = data['newHospital'] as Map<String, dynamic>?;
-    final name = newHospital?['name']?.toString() ?? 'another hospital';
-    final reason = data['reason']?.toString() ?? '';
-    final etaText = data['newEtaText']?.toString();
-
-    HapticFeedback.heavyImpact();
-
-    showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogCtx) => Dialog.fullscreen(
-        backgroundColor: Resq.decision,
-        child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(28),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const Icon(Icons.alt_route, color: Colors.white, size: 84),
-                const SizedBox(height: 20),
-                Text(
-                  'REDIRECT',
-                  textAlign: TextAlign.center,
-                  style: ResqType.display(color: Resq.ink).copyWith(color: Colors.white, fontSize: 34),
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  'Go to $name instead',
-                  textAlign: TextAlign.center,
-                  style: ResqType.title(color: Resq.ink).copyWith(color: Colors.white),
-                ),
-                if (reason.isNotEmpty) ...[
-                  const SizedBox(height: 10),
-                  Text(
-                    'Reason: $reason',
-                    textAlign: TextAlign.center,
-                    style: ResqType.body(color: Resq.ink).copyWith(color: Colors.white70),
-                  ),
-                ],
-                if (etaText != null && etaText.isNotEmpty) ...[
-                  const SizedBox(height: 6),
-                  Text(
-                    'New ETA: $etaText',
-                    textAlign: TextAlign.center,
-                    style: ResqType.body(color: Resq.ink).copyWith(color: Colors.white70),
-                  ),
-                ],
-                const SizedBox(height: 36),
-                SizedBox(
-                  height: 56,
-                  child: ElevatedButton(
-                    onPressed: () {
-                      Navigator.of(dialogCtx).pop();
-                      _applyRedirect(data);
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.white,
-                      foregroundColor: Resq.decision,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-                    ),
-                    child: Text(
-                      'Confirm — Rerouting',
-                      style: ResqType.button().copyWith(color: Resq.decision),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  // Point navigation at the new hospital and redraw the route to it.
-  Future<void> _applyRedirect(Map<String, dynamic> data) async {
-    final newHospital = data['newHospital'] as Map<String, dynamic>?;
-    final name = newHospital?['name']?.toString() ?? 'the new hospital';
-    final lat = double.tryParse('${newHospital?['lat']}');
-    final lng = double.tryParse('${newHospital?['lng']}');
-
-    setState(() {
-      _decision = 'awaiting_review'; // the new hospital must decide for itself
-      _acceptedHospitalName = null;
-      _preparationNote = null;
-      _routePoints = [];
-      if (lat != null && lng != null) {
-        _case = _case?.copyWith(
-          hospitalId: newHospital?['id']?.toString(),
-          hospitalName: name,
-          hospitalLat: lat,
-          hospitalLng: lng,
-        );
-      }
-    });
-
-    await _loadCase(); // authoritative destination from the backend
-    await _fetchRoute();
-
-    if (!mounted) return;
-    if (lat != null && lng != null && _status == 'en_route') {
-      _mapController.move(LatLng(lat, lng), _mapController.camera.zoom);
-    }
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Route updated to $name')),
-    );
-  }
 
   @override
   void dispose() {
@@ -724,11 +595,7 @@ class _DriverNavigationScreenState extends ConsumerState<DriverNavigationScreen>
                     const SizedBox(width: 12),
                   ],
                 ),
-                _HospitalDecisionBanner(
-                  decision: _decision,
-                  hospitalName: _acceptedHospitalName ?? c?.hospitalName,
-                  preparationNote: _preparationNote,
-                ),
+                _DestinationBanner(hospitalName: c?.hospitalName),
               ],
             ),
           ),
@@ -756,48 +623,34 @@ class _DriverNavigationScreenState extends ConsumerState<DriverNavigationScreen>
   }
 }
 
-/// Thin strip under the patient pill: what the hospital has decided so far.
-class _HospitalDecisionBanner extends StatelessWidget {
-  final String decision;
+/// Thin strip under the patient pill: where this ambulance is taking them.
+///
+/// It used to report what the hospital had decided — "Hospital reviewing…"
+/// until a ward pressed accept. Nothing decides now, so the strip says the one
+/// thing a driver needs off it: the destination.
+class _DestinationBanner extends StatelessWidget {
   final String? hospitalName;
-  final String? preparationNote;
 
-  const _HospitalDecisionBanner({
-    required this.decision,
-    required this.hospitalName,
-    required this.preparationNote,
-  });
+  const _DestinationBanner({required this.hospitalName});
 
   @override
   Widget build(BuildContext context) {
-    final accepted = decision == 'accepted';
-    final label = accepted
-        ? '✅ ${hospitalName ?? 'Hospital'} accepted'
-            '${preparationNote != null && preparationNote!.isNotEmpty ? ' · $preparationNote' : ''}'
-        : '⏳ Hospital reviewing…';
+    final named = hospitalName != null && hospitalName!.isNotEmpty;
 
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 350),
-      curve: Curves.easeOut,
+    return Container(
       margin: const EdgeInsets.symmetric(horizontal: 12),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       decoration: BoxDecoration(
-        color: accepted
-            ? Resq.ready.withValues(alpha: 0.92)
-            : Resq.surfaceAlt.withValues(alpha: 0.92),
+        color: named ? Resq.ready.withValues(alpha: 0.92) : Resq.surfaceAlt.withValues(alpha: 0.92),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: accepted ? Resq.ready : Resq.border,
-        ),
+        border: Border.all(color: named ? Resq.ready : Resq.border),
       ),
       width: double.infinity,
       child: Text(
-        label,
+        named ? '$hospitalName is expecting you' : 'Destination not chosen yet',
         textAlign: TextAlign.center,
-        style: ResqType.caption(color: Resq.inkMuted).copyWith(
-          color: accepted ? Colors.white : Resq.inkMuted,
-          fontWeight: accepted ? FontWeight.bold : FontWeight.normal,
-        ),
+        style: ResqType.caption(color: named ? Colors.white : Resq.inkMuted)
+            .copyWith(fontWeight: named ? FontWeight.bold : FontWeight.normal),
       ),
     );
   }

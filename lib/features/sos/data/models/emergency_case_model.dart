@@ -55,8 +55,6 @@ class EmergencyCaseModel {
   final List<String>? chronicConditions;
   final String? firstAidSuggestion;
   // v2 — the destination hospital's decision on this case.
-  final String? hospitalDecision;
-  final String? preparationNote;
 
   const EmergencyCaseModel({
     required this.id,
@@ -92,8 +90,6 @@ class EmergencyCaseModel {
     this.bloodGroup,
     this.chronicConditions,
     this.firstAidSuggestion,
-    this.hospitalDecision,
-    this.preparationNote,
   });
 
   factory EmergencyCaseModel.fromJson(Map<String, dynamic> json) {
@@ -139,8 +135,6 @@ class EmergencyCaseModel {
       bloodGroup: medical?['blood_group']?.toString(),
       chronicConditions: medical == null ? null : _list(medical['chronic_conditions']),
       firstAidSuggestion: ai?['first_aid_suggestion']?.toString(),
-      hospitalDecision: (json['hospital_decision'] ?? json['hospitalDecision'])?.toString(),
-      preparationNote: (json['preparation_note'] ?? json['preparationNote'])?.toString(),
     );
   }
 
@@ -218,8 +212,6 @@ class EmergencyCaseModel {
       bloodGroup: bloodGroup,
       chronicConditions: chronicConditions,
       firstAidSuggestion: firstAidSuggestion,
-      hospitalDecision: hospitalDecision,
-      preparationNote: preparationNote,
     );
   }
 }
