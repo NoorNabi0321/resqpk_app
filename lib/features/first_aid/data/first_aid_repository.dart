@@ -6,6 +6,7 @@ import 'package:hive_flutter/hive_flutter.dart';
 
 import '../../../core/constants/app_assets.dart';
 import '../../../core/network/api_client.dart';
+import 'guide_blurbs.dart';
 import 'models/first_aid_guide_model.dart';
 
 /// First aid content with offline-first caching: guides are fetched once and
@@ -128,6 +129,18 @@ class FirstAidRepository {
     return (await _bundledGuides()).isNotEmpty;
   }
 
+  /// Search across everything the reader can see, plus what they might mean.
+  ///
+  /// This used to cover the title, the category and the step instructions —
+  /// and not the one line the card actually shows. Someone reading "Fire, hot
+  /// oil, steam, chemicals or electricity" on the burns card and typing "fire"
+  /// got "Nothing matches", as did "oil", "electric" and "sun". The words were
+  /// on screen and in nothing searched.
+  ///
+  /// Both languages are searched whatever is on screen: typing "burn" while
+  /// reading Urdu should still find it, and nobody switches language to
+  /// search. emergency_types are in too, so "cut" and "wound" reach bleeding
+  /// even though neither word is printed on its card.
   List<FirstAidGuideModel> searchGuides(
     List<FirstAidGuideModel> guides,
     String query,
@@ -135,11 +148,25 @@ class FirstAidRepository {
   ) {
     final q = query.trim().toLowerCase();
     if (q.isEmpty) return guides;
-    return guides.where((g) {
-      if (g.getTitle(language).toLowerCase().contains(q)) return true;
-      if (g.category.toLowerCase().contains(q)) return true;
-      return g.getSteps(language).any((s) => s.instruction.toLowerCase().contains(q));
-    }).toList();
+
+    return guides.where((g) => _haystack(g).any((s) => s.contains(q))).toList();
+  }
+
+  /// Everything about one guide worth matching against, lower-cased.
+  Iterable<String> _haystack(FirstAidGuideModel g) sync* {
+    yield g.category.toLowerCase();
+    yield g.slug.replaceAll('-', ' ').toLowerCase();
+    for (final language in const ['en', 'ur']) {
+      yield g.getTitle(language).toLowerCase();
+      yield guideBlurb(g, language).toLowerCase();
+      for (final step in g.getSteps(language)) {
+        yield step.title.toLowerCase();
+        yield step.instruction.toLowerCase();
+      }
+    }
+    for (final type in g.emergencyTypes) {
+      yield type.replaceAll('_', ' ').toLowerCase();
+    }
   }
 
   List<FirstAidGuideModel> getRelevantGuides(

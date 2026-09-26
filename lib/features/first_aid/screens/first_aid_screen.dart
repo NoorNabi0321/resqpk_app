@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -195,20 +196,45 @@ class _FirstAidScreenState extends ConsumerState<FirstAidScreen> {
       );
     }
 
+    // Keyed on the result set, so narrowing a search animates rather than
+    // swapping silently. Without it the list changed between two frames and a
+    // reader could not tell whether their typing had done anything.
+    final resultKey = state.filteredGuides.map((g) => g.slug).join(',');
+
     return RefreshIndicator(
       onRefresh: () => notifier.loadGuides(forceRefresh: true),
       color: Resq.brandInk,
-      child: ListView.builder(
-        padding: const EdgeInsets.only(bottom: Resq.space6),
-        itemCount: state.filteredGuides.length,
-        itemBuilder: (_, i) {
-          final guide = state.filteredGuides[i];
-          return GuideCard(
-            guide: guide,
-            language: state.selectedLanguage,
-            onTap: () => context.push(Routes.guideDetail, extra: guide),
-          );
-        },
+      child: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 220),
+        switchInCurve: Curves.easeOut,
+        switchOutCurve: Curves.easeIn,
+        // The outgoing list must not push the incoming one around while both
+        // are alive, so they are stacked rather than laid out together.
+        layoutBuilder: (current, previous) => Stack(
+          alignment: Alignment.topCenter,
+          children: [...previous, if (current != null) current],
+        ),
+        child: ListView.builder(
+          key: ValueKey(resultKey),
+          padding: const EdgeInsets.only(bottom: Resq.space6),
+          itemCount: state.filteredGuides.length,
+          itemBuilder: (_, i) {
+            final guide = state.filteredGuides[i];
+            return GuideCard(
+              guide: guide,
+              language: state.selectedLanguage,
+              onTap: () => context.push(Routes.guideDetail, extra: guide),
+            )
+                // Staggered, but only just — eight cards at 28ms apart reads
+                // as the list settling, not as a queue forming.
+                .animate()
+                .fadeIn(
+                  duration: 220.ms,
+                  delay: Duration(milliseconds: 28 * (i < 6 ? i : 6)),
+                )
+                .slideY(begin: 0.06, end: 0, duration: 260.ms, curve: Curves.easeOutCubic);
+          },
+        ),
       ),
     );
   }

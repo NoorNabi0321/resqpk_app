@@ -5,6 +5,7 @@ import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:resqpk_app/core/constants/app_assets.dart';
 import 'package:resqpk_app/features/first_aid/data/models/first_aid_guide_model.dart';
+import 'package:resqpk_app/features/first_aid/data/guide_blurbs.dart';
 import 'package:resqpk_app/features/first_aid/widgets/guide_card.dart';
 
 /// The guide row has a fixed height and three stacked lines of text inside it,

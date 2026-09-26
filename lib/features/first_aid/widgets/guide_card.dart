@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/constants/app_assets.dart';
 import '../../../core/theme/tokens.dart';
 import '../../../core/theme/typography.dart';
+import '../data/guide_blurbs.dart';
 import '../data/models/first_aid_guide_model.dart';
 
 /// When to open each guide, in one line.
@@ -11,28 +12,8 @@ import '../data/models/first_aid_guide_model.dart';
 /// does not. "Treating Burns" tells you nothing about whether it covers the
 /// hot oil on someone's arm. This is interface copy, not clinical content: the
 /// steps inside are the guides themselves, straight from the backend.
-const Map<String, String> _whenToUse = {
-  'cpr-guide': 'Not breathing, no pulse. Chest compressions.',
-  'choking-guide': 'Cannot speak, cough or breathe. Blocked airway.',
-  'burns-guide': 'Fire, hot oil, steam, chemicals or electricity.',
-  'snake-bite-guide': 'Bitten by a snake. Keep them still.',
-  'bleeding-control-guide': 'Heavy bleeding that will not stop.',
-  'fracture-guide': 'Possible broken bone. Swelling, pain or deformity.',
-  'heatstroke-guide': 'Too hot, confused or collapsed in the sun.',
-  'eye-injury-guide': 'Object, chemicals, dust or trauma to the eye.',
-};
 
 /// Urdu equivalents, so the card reads as one language rather than two.
-const Map<String, String> _whenToUseUr = {
-  'cpr-guide': 'سانس نہیں آ رہا، نبض بند ہے۔',
-  'choking-guide': 'گلے میں کچھ پھنس گیا، سانس بند ہے۔',
-  'burns-guide': 'آگ، گرم تیل، بھاپ یا کیمیکل سے جلنا۔',
-  'snake-bite-guide': 'سانپ نے کاٹا ہے۔ مریض کو ہلنے نہ دیں۔',
-  'bleeding-control-guide': 'خون بہہ رہا ہے اور رک نہیں رہا۔',
-  'fracture-guide': 'ہڈی ٹوٹ سکتی ہے۔ سوجن یا شدید درد۔',
-  'heatstroke-guide': 'دھوپ میں زیادہ گرمی، بے ہوشی یا الجھن۔',
-  'eye-injury-guide': 'آنکھ میں چیز، کیمیکل، مٹی یا چوٹ۔',
-};
 
 /// The badge that stands in for the category, so a row is recognisable before
 /// a word of it is read.
@@ -61,16 +42,6 @@ const _fallbackBadge =
 /// it read as grey, and grey is what a disabled control looks like.
 const Color _cardCream = Resq.surface;
 
-String guideBlurb(FirstAidGuideModel guide, String language) {
-  final table = language == 'ur' ? _whenToUseUr : _whenToUse;
-  final blurb = table[guide.slug];
-  if (blurb != null) return blurb;
-
-  // Unknown slug — a guide added after this build. Fall back to its own first
-  // step, which is real content rather than an invented description.
-  final steps = guide.getSteps(language);
-  return steps.isEmpty ? guide.getTitle(language) : steps.first.instruction;
-}
 
 /// A guide, as a row you can read at a glance.
 ///
