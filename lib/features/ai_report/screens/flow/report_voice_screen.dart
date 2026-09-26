@@ -64,6 +64,18 @@ class ReportVoiceScreen extends ConsumerWidget {
       body: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
+          // Which language, before the microphone. Urdu and Sindhi sound alike
+          // enough that the transcriber has picked Hindi off Urdu speech and
+          // written a whole report in Devanagari; told the language up front it
+          // does not have to guess. Hidden once recording starts — it is too
+          // late to change and the screen should be the microphone.
+          if (!recording && !recorded) ...[
+            _LanguagePicker(
+              selected: state.selectedLanguage,
+              onChanged: notifier.setLanguage,
+            ),
+            const Spacer(),
+          ],
           _MicButton(
             recording: recording,
             recorded: recorded,
@@ -79,11 +91,12 @@ class ReportVoiceScreen extends ConsumerWidget {
             switch (state.recordingStatus) {
               RecordingStatus.recording => 'Recording — tap the microphone to stop',
               RecordingStatus.recorded => 'Recorded. Generate the report, or record again.',
-              _ => 'Urdu, Sindhi, English, or all three in one sentence',
+              _ => 'English words in the middle of a sentence are fine',
             },
             textAlign: TextAlign.center,
             style: ResqType.body(color: Resq.inkSoft),
           ),
+          if (!recording && !recorded) const Spacer(),
           if (state.error != null) ...[
             const SizedBox(height: Resq.space4),
             Container(
@@ -189,5 +202,82 @@ class _Ring extends StatelessWidget {
           curve: Curves.easeOut,
         )
         .fadeOut(delay: Duration(milliseconds: delayMs), duration: 1400.ms);
+  }
+}
+
+/// Which language the caller is about to speak.
+///
+/// Urdu and Sindhi are the two that matter here and the two a transcriber
+/// confuses — they share an alphabet and, to an ear, a great deal else. The
+/// codes match the backend's: 'auto' leaves it to detect, which is what
+/// happens if nobody touches this.
+class _LanguagePicker extends StatelessWidget {
+  const _LanguagePicker({required this.selected, required this.onChanged});
+
+  final String selected;
+  final ValueChanged<String> onChanged;
+
+  // Roman Urdu is absent on purpose: it is a way of writing Urdu, not of
+  // speaking it. Someone who picks it on the typing screen still speaks Urdu.
+  static const _options = [
+    (code: 'ur', label: 'اردو', hint: 'Urdu'),
+    (code: 'sd', label: 'سنڌي', hint: 'Sindhi'),
+    (code: 'en', label: 'English', hint: 'English'),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Text('Which language will you speak?', style: ResqType.caption()),
+        const SizedBox(height: Resq.space3),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            for (final o in _options) ...[
+              if (o != _options.first) const SizedBox(width: Resq.space2),
+              _LanguageChip(
+                label: o.label,
+                active: selected == o.code,
+                onTap: () => onChanged(o.code),
+              ),
+            ],
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _LanguageChip extends StatelessWidget {
+  const _LanguageChip({required this.label, required this.active, required this.onTap});
+
+  final String label;
+  final bool active;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: active ? Resq.brandInk : Resq.surface,
+      borderRadius: BorderRadius.circular(Resq.radiusPill),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(Resq.radiusPill),
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 40),
+          alignment: Alignment.center,
+          padding: const EdgeInsets.symmetric(horizontal: Resq.space4),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(Resq.radiusPill),
+            border: Border.all(color: active ? Resq.brandInk : Resq.border),
+          ),
+          child: Text(
+            label,
+            style: ResqType.bodyStrong(color: active ? Colors.white : Resq.inkSoft),
+          ),
+        ),
+      ),
+    );
   }
 }
