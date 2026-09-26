@@ -37,6 +37,7 @@ import '../../features/profile/screens/profile_screen.dart';
 import '../../features/camps/screens/camps_screen.dart';
 import '../../features/camps/screens/camp_detail_screen.dart';
 import '../../features/camps/screens/camp_route_screen.dart';
+import '../../features/driver/screens/case_closed_screen.dart';
 import '../../features/camps/data/models/camp_model.dart';
 
 /// Centralized route paths.
@@ -82,6 +83,7 @@ class Routes {
   static const String driverNavigation = '/driver-navigation';
   static const String driverHistory = '/driver/history';
   static const String driverArea = '/driver/area';
+  static const String driverCaseClosed = '/driver/case-closed';
   static const String profile = '/profile';
 }
 
@@ -97,6 +99,7 @@ const Set<String> _guardedRoutes = {
   Routes.driverNavigation,
   Routes.driverHistory,
   Routes.driverArea,
+  Routes.driverCaseClosed,
   Routes.profile,
   Routes.medicalProfile,
 };
@@ -286,6 +289,12 @@ final appRouter = GoRouter(
 
     // --- Driver --------------------------------------------------------------
     GoRoute(path: Routes.driverHome, pageBuilder: (c, s) => _page(const DriverHomeScreen())),
+    // Why the navigation screen went away. Holds three seconds, then goes to
+    // the dashboard by itself.
+    GoRoute(
+      path: Routes.driverCaseClosed,
+      pageBuilder: (c, s) => _page(CaseClosedScreen(reason: s.extra as String?)),
+    ),
     GoRoute(
       path: Routes.driverNavigation,
       pageBuilder: (c, s) => _page(DriverNavigationScreen(caseId: s.extra as String? ?? '')),

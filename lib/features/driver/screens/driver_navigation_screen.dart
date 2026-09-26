@@ -106,6 +106,14 @@ class _DriverNavigationScreenState extends ConsumerState<DriverNavigationScreen>
         _showRedirectAlert(data);
         break;
 
+      // The patient called it off. Without this the driver was left on a map,
+      // navigating to an address nobody is waiting at, until they worked out
+      // for themselves that something had changed and backed out by hand.
+      case 'cancelled':
+        ref.read(driverLocationBroadcasterProvider).updateActiveCaseId(null);
+        context.go(Routes.driverCaseClosed, extra: data['reason']?.toString());
+        break;
+
       // Another driver took over — this screen is no longer ours.
       case 'handoff_released':
         ref.read(driverLocationBroadcasterProvider).updateActiveCaseId(null);
