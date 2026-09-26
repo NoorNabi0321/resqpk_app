@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../core/router/app_router.dart';
 import '../../../core/theme/tokens.dart';
 import '../../../core/theme/typography.dart';
 import '../../../core/map/resqpk_map.dart';
@@ -22,14 +24,14 @@ class CampDetailScreen extends ConsumerWidget {
     if (await canLaunchUrl(uri)) await launchUrl(uri);
   }
 
-  Future<void> _directions(CampModel c) async {
-    // Hands off to Google Maps for turn-by-turn — no in-app navigation needed.
-    final uri = Uri.parse(
-      'https://www.google.com/maps/dir/?api=1&destination=${c.lat},${c.lng}',
-    );
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    }
+  /// Opens the way there on the app's own map.
+  ///
+  /// This used to hand straight off to Google Maps, which is fine to offer and
+  /// poor to force: on a phone without it the button did nothing at all, with
+  /// no way to tell. The route screen draws the road line here and still
+  /// offers the handoff for turn-by-turn voice guidance.
+  void _directions(BuildContext context, CampModel c) {
+    context.push('${Routes.camps}/${c.id}/route', extra: c);
   }
 
   @override
@@ -126,7 +128,10 @@ class CampDetailScreen extends ConsumerWidget {
                   ),
                 ),
                 children: [
-                  const ResQPKTileLayer(),
+                  // Light, like every other map in the app. This was the one
+                  // screen still on the dark basemap, which read as a
+                  // different app on a cream page.
+                  const ResQPKTileLayer(light: true),
                   MarkerLayer(
                     markers: [
                       Marker(
@@ -173,11 +178,13 @@ class CampDetailScreen extends ConsumerWidget {
                 const SizedBox(width: 12),
               Expanded(
                 child: ElevatedButton.icon(
-                  onPressed: () => _directions(c),
+                  onPressed: () => _directions(context, c),
                   icon: const Icon(Icons.navigation_outlined, size: 18, color: Colors.white),
                   label: Text('Directions', style: ResqType.button().copyWith(fontSize: 14)),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Resq.info,
+                    // brandInk, not brand: white on brand is 3.4:1, which
+                    // fails at this label size. Same pair as PrimaryButton.
+                    backgroundColor: Resq.brandInk,
                     minimumSize: const Size(0, 48),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),

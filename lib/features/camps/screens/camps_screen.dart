@@ -131,9 +131,6 @@ class _CampCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final services = camp.servicesOffered;
-    final extra = services.length > 3 ? services.length - 3 : 0;
-
     return GestureDetector(
       onTap: () => context.push('${Routes.camps}/${camp.id}', extra: camp),
       child: Container(
@@ -147,9 +144,17 @@ class _CampCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(camp.name, style: ResqType.section()),
-            if (camp.organizerName != null) ...[
-              const SizedBox(height: 2),
-              Text(camp.organizerName!, style: ResqType.caption()),
+            // What the camp actually does, in its own words. The organiser
+            // name used to sit here; the detail screen carries it, along with
+            // the full service list this card no longer tries to print.
+            if ((camp.description ?? '').trim().isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text(
+                camp.description!.trim(),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: ResqType.caption(color: Resq.inkSoft),
+              ),
             ],
             const SizedBox(height: 10),
             Row(
@@ -163,34 +168,6 @@ class _CampCard extends StatelessWidget {
                   ),
               ],
             ),
-            if (services.isNotEmpty) ...[
-              const SizedBox(height: 10),
-              Wrap(
-                spacing: 6,
-                runSpacing: 6,
-                children: [
-                  ...services.take(3).map(
-                        (s) => Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: Resq.surfaceAlt,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(s, style: ResqType.caption()),
-                        ),
-                      ),
-                  if (extra > 0)
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: Resq.surfaceAlt,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text('+$extra more', style: ResqType.caption()),
-                    ),
-                ],
-              ),
-            ],
             if (camp.address != null) ...[
               const SizedBox(height: 10),
               Row(

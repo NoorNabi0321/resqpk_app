@@ -36,6 +36,7 @@ import '../../features/ai_report/data/models/ai_report_model.dart';
 import '../../features/profile/screens/profile_screen.dart';
 import '../../features/camps/screens/camps_screen.dart';
 import '../../features/camps/screens/camp_detail_screen.dart';
+import '../../features/camps/screens/camp_route_screen.dart';
 import '../../features/camps/data/models/camp_model.dart';
 
 /// Centralized route paths.
@@ -195,6 +196,16 @@ final appRouter = GoRouter(
                       camp: s.extra as CampModel?,
                     ),
                   ),
+                  routes: [
+                    // The way there, on our own map. Takes the camp itself
+                    // rather than refetching it — the caller already has it.
+                    GoRoute(
+                      path: 'route',
+                      pageBuilder: (c, s) => _page(
+                        CampRouteScreen(camp: s.extra! as CampModel),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),

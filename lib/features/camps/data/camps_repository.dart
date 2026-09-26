@@ -46,6 +46,35 @@ class CampsRepository {
     }
   }
 
+  /// GET /api/camps/:id/route — the road line from here to the camp.
+  ///
+  /// Never throws. A camp with no route still has a pin, and a straight line
+  /// to it points the right way, which is better than an error where a map
+  /// should be.
+  Future<List<({double lat, double lng})>> getRouteToCamp(
+    String campId,
+    double fromLat,
+    double fromLng,
+  ) async {
+    try {
+      final res = await apiClient.get(
+        '/api/camps/$campId/route',
+        queryParameters: {'lat': fromLat, 'lng': fromLng},
+      );
+      final coords = (res['data']?['coordinates'] as List?) ?? [];
+      return coords
+          .whereType<Map>()
+          .map((p) => (
+                lat: double.tryParse('${p['lat']}') ?? 0,
+                lng: double.tryParse('${p['lng']}') ?? 0,
+              ))
+          .where((p) => p.lat != 0 && p.lng != 0)
+          .toList();
+    } catch (_) {
+      return const [];
+    }
+  }
+
   /// True when the list currently on screen came from the cache, so the UI can
   /// say so rather than implying the data is live.
   Future<bool> isServingCache() async {
