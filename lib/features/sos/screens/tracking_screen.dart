@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -469,6 +470,8 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final collapsedFraction = _collapsedSheetFraction(context);
+
     // Live driver position from the case room broadcasts.
     ref.listen(driverLocationStreamProvider, (_, next) {
       next.whenData((data) {
@@ -645,10 +648,10 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
             // so it never rests somewhere useless.
             DraggableScrollableSheet(
               initialChildSize: 0.46,
-              minChildSize: 0.17,
+              minChildSize: collapsedFraction,
               maxChildSize: 0.92,
               snap: true,
-              snapSizes: const [0.17, 0.46, 0.92],
+              snapSizes: [collapsedFraction, 0.46, 0.92],
               builder: (context, scrollController) => _TrackingCard(
                 scrollController: scrollController,
                 status: sos.status,
@@ -678,6 +681,69 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
         ),
       ),
     );
+  }
+
+  /// How far down the sheet may be dragged, as a fraction of screen height.
+  ///
+  /// It used to be a flat 0.17, which left "Call Rescue 1122" sliced in half
+  /// along the bottom edge — a button cut lengthways looks like a rendering
+  /// fault, and the whole point of dragging down is to see the map. The
+  /// collapsed card is a fixed stack of pixels, so any fraction of screen
+  /// height lands somewhere different on every phone; it is measured instead,
+  /// and stops exactly below the header text.
+  ///
+  /// Measured against the searching header, which is the taller of the two —
+  /// its subtitle wraps to two lines where an assigned driver's vehicle number
+  /// is one. So the collapsed height suits both, and does not jump when a
+  /// driver accepts.
+  double _collapsedSheetFraction(BuildContext context) {
+    final media = MediaQuery.of(context);
+
+    const cardTopPadding = Resq.space3;
+    const handleBlock = 5.0 + Resq.space3;   // grip plus its bottom margin
+    const gapBelowHandle = Resq.space2;
+    const iconDiameter = 46.0;
+    const gapBelowTitle = 2.0;
+    // Enough that the subtitle is not flush against the cut edge.
+    const breathingRoom = 12.0;
+
+    final textWidth = media.size.width
+        - Resq.space5 * 2      // card padding
+        - iconDiameter
+        - Resq.space3;         // gap between icon and text
+
+    double heightOf(String text, TextStyle style) {
+      final painter = TextPainter(
+        text: TextSpan(text: text, style: style),
+        textDirection: TextDirection.ltr,
+        textScaler: media.textScaler,
+      )..layout(maxWidth: textWidth);
+      final height = painter.height;
+      painter.dispose();
+      return height;
+    }
+
+    final titleHeight = heightOf('Finding the nearest ambulance', ResqType.section());
+    final subtitleHeight = heightOf(
+      'Drivers are being offered your emergency one at a time, closest first.',
+      ResqType.caption(color: Resq.inkSoft),
+    );
+
+    final headerHeight = math.max(iconDiameter, titleHeight + gapBelowTitle + subtitleHeight);
+    final collapsed = cardTopPadding
+        + handleBlock
+        + gapBelowHandle
+        + headerHeight
+        + breathingRoom
+        // The card's own SafeArea pads the bottom of its scroll view, so that
+        // inset eats into the collapsed height rather than sitting under it.
+        + media.padding.bottom;
+
+    // Only an upper bound. A floor in screen fractions is what caused this in
+    // the first place: on a tall screen 0.12 is taller than the header needs,
+    // and the surplus is button. The measured value already includes the whole
+    // header, so it can never come out too small to grab.
+    return math.min(collapsed / media.size.height, 0.40);
   }
 
   String _etaText(int? seconds, SOSStatus status) {
