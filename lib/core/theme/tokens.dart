@@ -27,6 +27,13 @@ class Resq {
   static const Color brandInk = Color(0xFFC2410C);
   static const Color brandTint = Color(0xFFFFEDE4);
 
+  /// The brand colour for text on a dark ground, such as the onboarding scrim.
+  ///
+  /// `brand` measures 2.9:1 against that scrim, under the 3:1 large text needs;
+  /// lifted like this it is 3.8:1 and still plainly the same orange. The pair
+  /// mirrors `brandInk`: one brand colour for light grounds, one for dark.
+  static const Color brandOnDark = Color(0xFFFF7A55);
+
   // --- Emergency: deliberately redder than brand so the two never blur -----
   static const Color critical = Color(0xFFD62828);
   static const Color criticalPressed = Color(0xFFA81E1E);
