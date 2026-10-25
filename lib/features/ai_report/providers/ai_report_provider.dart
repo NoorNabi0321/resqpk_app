@@ -12,6 +12,7 @@ import '../../auth/providers/auth_provider.dart';
 import '../../sos/providers/session_provider.dart';
 import '../data/ai_report_repository.dart';
 import '../data/models/ai_report_model.dart';
+import '../data/models/clarification_model.dart';
 import '../data/models/recording_state_model.dart';
 
 class AIReportState {
@@ -25,6 +26,24 @@ class AIReportState {
   final AIReportModel? report;
   final String? error;
 
+  /// The questions put before anything is written, while they are still open.
+  ///
+  /// Held here rather than on [report] because during this phase there is no
+  /// report: the whole point of asking first is that nothing has been written
+  /// and nothing has reached the hospital.
+  final List<ClarificationModel> clarifications;
+
+  /// True between the questions arriving and the record being written.
+  final bool awaitingClarification;
+
+  /// A single answer is in flight.
+  final bool isAnswering;
+
+  /// The answer that closed the sequence is in flight, so the record is being
+  /// written right now. Separate from [isAnswering] because the wait is ten
+  /// seconds rather than one and the screen has to say something different.
+  final bool isFinalising;
+
   const AIReportState({
     this.recordingStatus = RecordingStatus.idle,
     this.recordingDuration = Duration.zero,
@@ -35,12 +54,20 @@ class AIReportState {
     this.isSubmitting = false,
     this.report,
     this.error,
+    this.clarifications = const [],
+    this.awaitingClarification = false,
+    this.isAnswering = false,
+    this.isFinalising = false,
   });
 
   bool get hasAnyInput =>
       (audioPath != null && audioPath!.isNotEmpty) ||
       textInput.trim().isNotEmpty ||
       selectedImages.isNotEmpty;
+
+  /// Questions still needing a tap.
+  List<ClarificationModel> get openClarifications =>
+      clarifications.where((c) => !c.isAnswered && c.skippedAt == null).toList();
 
   AIReportState copyWith({
     RecordingStatus? recordingStatus,
@@ -52,6 +79,10 @@ class AIReportState {
     bool? isSubmitting,
     AIReportModel? report,
     String? error,
+    List<ClarificationModel>? clarifications,
+    bool? awaitingClarification,
+    bool? isAnswering,
+    bool? isFinalising,
     bool clearAudio = false,
     bool clearReport = false,
     bool clearError = false,
@@ -66,6 +97,10 @@ class AIReportState {
       isSubmitting: isSubmitting ?? this.isSubmitting,
       report: clearReport ? null : (report ?? this.report),
       error: clearError ? null : (error ?? this.error),
+      clarifications: clarifications ?? this.clarifications,
+      awaitingClarification: awaitingClarification ?? this.awaitingClarification,
+      isAnswering: isAnswering ?? this.isAnswering,
+      isFinalising: isFinalising ?? this.isFinalising,
     );
   }
 }
@@ -191,6 +226,15 @@ class AIReportNotifier extends StateNotifier<AIReportState> {
     }
   }
 
+  /// Takes a report fetched from the server into state without touching the
+  /// recorded inputs. Used when a screen finds a finished report for a case
+  /// that this notifier knows nothing about — after an app restart, or when
+  /// the report was generated on another device on the same case.
+  void adoptExistingReport(AIReportModel report) {
+    if (state.report != null) return; // never overwrite a fresher local one
+    state = state.copyWith(report: report);
+  }
+
   /// Starts a new report, keeping nothing from the last one.
   void startFresh() {
     _durationTimer?.cancel();
@@ -201,15 +245,24 @@ class AIReportNotifier extends StateNotifier<AIReportState> {
 
   void setLanguage(String language) => state = state.copyWith(selectedLanguage: language);
 
-  Future<void> submitReport(String caseId) async {
+  /// Phase one: send the inputs and get back the questions.
+  ///
+  /// Nothing reaches the hospital here. The server transcribes, looks at any
+  /// photo, and composes the two to four questions it needs answered before it
+  /// will write a clinical record. Returns true when there are questions to
+  /// put, false when the record was written straight away because there were
+  /// none worth asking.
+  Future<bool> submitReport(String caseId) async {
     if (!state.hasAnyInput) {
       state = state.copyWith(error: 'Add a voice note, text, or photo first');
-      return;
+      return false;
     }
 
     state = state.copyWith(
       isSubmitting: true,
       recordingStatus: RecordingStatus.processing,
+      awaitingClarification: false,
+      clarifications: const [],
       clearError: true,
       clearReport: true,
     );
@@ -224,7 +277,7 @@ class AIReportNotifier extends StateNotifier<AIReportState> {
     });
 
     try {
-      final report = await _repository.generateReport(
+      final result = await _repository.startReport(
         caseId: caseId,
         audioFilePath: state.audioPath,
         textInput: state.textInput,
@@ -232,19 +285,133 @@ class AIReportNotifier extends StateNotifier<AIReportState> {
         language: state.selectedLanguage,
         caseToken: caseToken,
       );
+
+      if (result.awaitingClarification) {
+        state = state.copyWith(
+          clarifications: result.clarifications,
+          awaitingClarification: true,
+          isSubmitting: false,
+          recordingStatus: RecordingStatus.processing,
+        );
+        return true;
+      }
+
       state = state.copyWith(
-        report: report,
+        report: result.report,
+        clarifications: result.report?.clarifications ?? const [],
+        awaitingClarification: false,
         recordingStatus: RecordingStatus.completed,
         isSubmitting: false,
       );
+      return false;
     } catch (e) {
       state = state.copyWith(
         error: e.toString().replaceFirst('Exception: ', ''),
         recordingStatus: RecordingStatus.error,
         isSubmitting: false,
+        awaitingClarification: false,
       );
+      return false;
     } finally {
       await sub.cancel();
+    }
+  }
+
+  /// Picks the question sequence back up for a case this notifier knows nothing
+  /// about — the app was killed part way through, or reopened from tracking.
+  ///
+  /// Returns true when there are still questions out.
+  Future<bool> resumeClarification(String caseId) async {
+    try {
+      final open = await _repository.getOpenClarifications(
+        caseId,
+        caseToken: _caseToken(caseId),
+      );
+      final outstanding = open.where((c) => !c.isAnswered && c.skippedAt == null).toList();
+      if (outstanding.isEmpty) return false;
+      state = state.copyWith(clarifications: open, awaitingClarification: true);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Records one single-tap answer.
+  ///
+  /// Returns false when the answer did not land, so the screen can stay on the
+  /// question rather than moving on and losing it. Nothing has been written or
+  /// sent at this point, so a failed answer costs one field and no one at the
+  /// hospital is reading anything yet.
+  ///
+  /// The answer that closes the sequence is the one that makes the server write
+  /// the record and deliver it; that response carries the finished report, and
+  /// [AIReportState.isFinalising] is true while it is in flight.
+  Future<bool> answerClarification(
+    String caseId, {
+    required String questionId,
+    required String answer,
+  }) async {
+    final last = state.openClarifications.length <= 1;
+    state = state.copyWith(
+      isAnswering: true,
+      isFinalising: last,
+      clearError: true,
+    );
+    try {
+      final result = await _repository.answerClarification(
+        caseId,
+        questionId: questionId,
+        answer: answer,
+        caseToken: _caseToken(caseId),
+      );
+      state = state.copyWith(
+        clarifications: result.clarifications.isEmpty
+            ? state.clarifications
+            : result.clarifications,
+        report: result.report,
+        awaitingClarification: result.report == null,
+        recordingStatus:
+            result.report != null ? RecordingStatus.completed : state.recordingStatus,
+        isAnswering: false,
+        isFinalising: false,
+      );
+      return true;
+    } catch (e) {
+      state = state.copyWith(
+        error: e.toString().replaceFirst('Exception: ', ''),
+        isAnswering: false,
+        isFinalising: false,
+      );
+      return false;
+    }
+  }
+
+  /// Closes the sequence and has the record written from whatever is known.
+  ///
+  /// This is the deliberate skip, and it is what bounds the delay asking first
+  /// imposes: one tap and the hospital has its report. Not fire-and-forget —
+  /// the report does not exist until this returns, so the screen has to wait
+  /// for it. Returns false if it failed, leaving the questions where they were.
+  Future<bool> skipClarifications(String caseId) async {
+    state = state.copyWith(isFinalising: true, clearError: true);
+    try {
+      final report = await _repository.skipClarifications(
+        caseId,
+        caseToken: _caseToken(caseId),
+      );
+      state = state.copyWith(
+        report: report,
+        awaitingClarification: false,
+        recordingStatus: report != null ? RecordingStatus.completed : state.recordingStatus,
+        isFinalising: false,
+      );
+      return true;
+    } catch (e) {
+      state = state.copyWith(
+        error: e.toString().replaceFirst('Exception: ', ''),
+        isFinalising: false,
+      );
+      return false;
     }
   }
 

@@ -134,7 +134,22 @@ class AuthRepository {
     }
   }
 
-  // 9. Stored role from cached user data
+  // 9. The user as they were when they last signed in.
+  //
+  // Enough to bring a session back up when the profile call cannot be made —
+  // a cold backend, no signal, a tunnel. The row is refreshed on the next
+  // successful call.
+  Future<UserModel?> getCachedUser() async {
+    final userData = await SecureStorage.getUserData();
+    if (userData == null) return null;
+    try {
+      return UserModel.fromLocalStorage(userData);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  // 10. Stored role from cached user data
   Future<String?> getStoredRole() async {
     final userData = await SecureStorage.getUserData();
     if (userData == null) return null;

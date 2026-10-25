@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'clarification_model.dart';
+
 /// AI emergency report — parses both the DB row (snake_case, from GET
 /// /api/ai/report) and the pipeline/socket payload (camelCase).
 class AIReportModel {
@@ -22,6 +24,19 @@ class AIReportModel {
   /// Signed URL of the generated PDF (expires ~6h; refresh via the API).
   final String? pdfUrl;
 
+  /// How well the input supported the report, 0 to 1. Null on older reports.
+  final double? confidenceScore;
+
+  /// 'none' | 'awaiting' | 'answered' | 'skipped'.
+  ///
+  /// Where the case got to in the question sequence that ran *before* this
+  /// report was written. 'awaiting' means there is no report yet at all.
+  final String clarificationState;
+
+  /// The two to four single-tap questions put before the report was written,
+  /// with the answers that fed it.
+  final List<ClarificationModel> clarifications;
+
   const AIReportModel({
     this.id,
     required this.caseId,
@@ -40,7 +55,16 @@ class AIReportModel {
     this.generationStatus = 'pending',
     this.errorMessage,
     this.pdfUrl,
+    this.confidenceScore,
+    this.clarificationState = 'none',
+    this.clarifications = const [],
   });
+
+  static double? _double(dynamic v) {
+    if (v == null) return null;
+    if (v is num) return v.toDouble();
+    return double.tryParse(v.toString());
+  }
 
   static List<String> _list(dynamic v) {
     if (v is List) return v.map((e) => e.toString()).toList();
@@ -71,6 +95,10 @@ class AIReportModel {
       generationStatus: (j['generation_status'] ?? j['generationStatus'])?.toString() ?? 'pending',
       errorMessage: (j['error_message'] ?? j['errorMessage'])?.toString(),
       pdfUrl: (j['pdf_url'] ?? j['pdfUrl'])?.toString(),
+      confidenceScore: _double(j['confidence_score'] ?? j['confidenceScore']),
+      clarificationState:
+          (j['clarification_state'] ?? j['clarificationState'])?.toString() ?? 'none',
+      clarifications: ClarificationModel.listFrom(j['clarifications']),
     );
   }
 
@@ -91,6 +119,9 @@ class AIReportModel {
         'generation_time_ms': generationTimeMs,
         'generation_status': generationStatus,
         'error_message': errorMessage,
+        'confidence_score': confidenceScore,
+        'clarification_state': clarificationState,
+        'clarifications': clarifications.map((c) => c.toJson()).toList(),
       };
 
   AIReportModel copyWith({
@@ -111,6 +142,9 @@ class AIReportModel {
     String? generationStatus,
     String? errorMessage,
     String? pdfUrl,
+    double? confidenceScore,
+    String? clarificationState,
+    List<ClarificationModel>? clarifications,
   }) {
     return AIReportModel(
       id: id ?? this.id,
@@ -130,6 +164,9 @@ class AIReportModel {
       generationStatus: generationStatus ?? this.generationStatus,
       errorMessage: errorMessage ?? this.errorMessage,
       pdfUrl: pdfUrl ?? this.pdfUrl,
+      confidenceScore: confidenceScore ?? this.confidenceScore,
+      clarificationState: clarificationState ?? this.clarificationState,
+      clarifications: clarifications ?? this.clarifications,
     );
   }
 
@@ -151,4 +188,23 @@ class AIReportModel {
   bool get isComplete => generationStatus == 'completed';
   bool get isFailed => generationStatus == 'failed';
   bool get isProcessing => generationStatus == 'processing';
+
+  /// No report has been written yet: the questions are still out.
+  ///
+  /// The hospital has nothing in this state, which is the deliberate cost of
+  /// asking first. It is also resumable — an app reopened here picks the
+  /// sequence back up where it stopped.
+  bool get isAwaitingClarification => generationStatus == 'awaiting_clarification';
+
+  /// Questions still waiting on a tap. Empty once the record has been written:
+  /// the answers were inputs to it, and there is nothing left to ask.
+  List<ClarificationModel> get openClarifications => isAwaitingClarification
+      ? clarifications.where((c) => !c.isAnswered && c.skippedAt == null).toList()
+      : const [];
+
+  bool get hasOpenClarifications => openClarifications.isNotEmpty;
+
+  /// How many answers actually fed this report, for the line that says so.
+  int get answeredClarificationCount =>
+      clarifications.where((c) => c.isAnswered).length;
 }

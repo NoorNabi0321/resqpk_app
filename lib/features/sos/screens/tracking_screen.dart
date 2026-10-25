@@ -18,6 +18,7 @@ import '../../../core/theme/typography.dart';
 import '../../../core/widgets/back_guard.dart';
 import '../../../core/widgets/primary_button.dart';
 import '../../../core/widgets/resq_card.dart';
+import '../../ai_report/data/ai_report_repository.dart';
 import '../../ai_report/data/models/ai_report_model.dart';
 import '../../ai_report/providers/ai_report_provider.dart';
 import '../../auth/providers/auth_provider.dart';
@@ -54,6 +55,11 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
   bool _fetchingRoute = false;
 
   AIReportModel? _latestReport;
+
+  /// The questions are out and the record has not been written. The hospital
+  /// has nothing in this state, so the sheet says so rather than offering to
+  /// "view" a report that does not exist.
+  bool _awaitingClarification = false;
   StreamSubscription<Map<String, dynamic>>? _aiSub;
   StreamSubscription<Map<String, dynamic>>? _decisionSub;
 
@@ -91,6 +97,12 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
         ));
       }
     });
+
+    // A report already on the server has to be found, not remembered. The
+    // button below read "Create AI emergency report" again after a restart or
+    // after coming back from the report itself, because the only evidence a
+    // report existed was a socket event this screen had to be mounted for.
+    Future.microtask(_loadExistingReport);
 
     // Fetch the road route now and refresh it as the driver moves.
     _fetchRoute();
@@ -144,6 +156,43 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
         signedIn: ref.read(authProvider).isAuthenticated,
         caseId: caseId,
       );
+
+  /// Asks the server where this case's report stands.
+  ///
+  /// Three answers matter, and the sheet says something different for each: it
+  /// is finished and can be read, the questions are still out and the hospital
+  /// has nothing yet, or there is no report at all. Only the last one offers to
+  /// start one.
+  Future<void> _loadExistingReport() async {
+    final caseId = ref.read(sosProvider).activeCaseId;
+    if (caseId == null) return;
+    try {
+      final report = await AIReportRepository()
+          .getReport(caseId, caseToken: _caseToken(caseId));
+      if (!mounted || report == null) return;
+
+      // Parked mid-sequence: the app was killed, or the phone was locked,
+      // between the questions arriving and the report being written. Nothing
+      // has gone to the hospital, so this is the one state worth interrupting
+      // someone about.
+      if (report.isAwaitingClarification) {
+        setState(() => _awaitingClarification = true);
+        return;
+      }
+      if (!report.isComplete) return;
+
+      setState(() {
+        _latestReport = report;
+        _awaitingClarification = false;
+      });
+      // The notifier is what the result screen reads for the heading and the
+      // file name, and it is empty on a cold start.
+      ref.read(aiReportProvider.notifier).adoptExistingReport(report);
+    } catch (_) {
+      // Worst case the button still says "Create" — one wasted tap, not a
+      // blocked screen.
+    }
+  }
 
   Future<void> _fetchRoute() async {
     final caseId = ref.read(sosProvider).activeCaseId;
@@ -437,6 +486,13 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
       context.push(Routes.reportResult, extra: caseId);
       return;
     }
+    // Questions still out: pick the sequence back up rather than starting over
+    // and re-recording everything. The screen re-reads what is open from the
+    // server, so it works on a fresh launch too.
+    if (_awaitingClarification || ref.read(aiReportProvider).awaitingClarification) {
+      context.push(Routes.reportClarify, extra: caseId);
+      return;
+    }
     // Nothing recorded yet — start the flow at its first question, with no
     // leftovers from a previous case.
     ref.read(aiReportProvider.notifier).startFresh();
@@ -640,6 +696,8 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
                 hasDriver: c.driverId != null,
                 hasReport: _latestReport != null ||
                     (ref.watch(aiReportProvider).report?.isComplete ?? false),
+                awaitingClarification: _awaitingClarification ||
+                    ref.watch(aiReportProvider).awaitingClarification,
                 suggestedHospital: _suggestedHospital,
                 loadingSuggestion: _loadingSuggestion,
                 confirmingHospital: _confirmingHospital,
@@ -908,6 +966,7 @@ class _TrackingCard extends StatelessWidget {
     required this.hospitalSelected,
     required this.hasDriver,
     required this.hasReport,
+    required this.awaitingClarification,
     required this.suggestedHospital,
     required this.loadingSuggestion,
     required this.confirmingHospital,
@@ -932,6 +991,9 @@ class _TrackingCard extends StatelessWidget {
   final bool hospitalSelected;
   final bool hasDriver;
   final bool hasReport;
+
+  /// Questions asked, report not written, hospital told nothing yet.
+  final bool awaitingClarification;
   final Map<String, dynamic>? suggestedHospital;
   final bool loadingSuggestion;
   final bool confirmingHospital;
@@ -1012,6 +1074,17 @@ class _TrackingCard extends StatelessWidget {
                   SecondaryButton(
                     label: 'View AI report',
                     icon: Icons.picture_as_pdf_rounded,
+                    onPressed: onAiReport,
+                    height: 52,
+                  )
+                // Unfinished, and the hospital is waiting on it. Filled and
+                // urgent, because this is the one state where something the
+                // patient started has not reached anybody — and it is a few
+                // taps from doing so.
+                else if (awaitingClarification)
+                  PrimaryButton(
+                    label: 'Finish and send your report',
+                    icon: Icons.help_outline_rounded,
                     onPressed: onAiReport,
                     height: 52,
                   )

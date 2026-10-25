@@ -10,6 +10,7 @@ import 'package:share_plus/share_plus.dart';
 import '../../../../core/router/app_router.dart';
 import '../../../../core/theme/tokens.dart';
 import '../../../../core/theme/typography.dart';
+import '../../../../core/widgets/back_guard.dart';
 import '../../../auth/providers/auth_provider.dart';
 import '../../../sos/providers/session_provider.dart';
 import '../../data/ai_report_repository.dart';
@@ -144,29 +145,52 @@ class _ReportResultScreenState extends ConsumerState<ReportResultScreen> {
   Widget build(BuildContext context) {
     final report = ref.watch(aiReportProvider).report;
 
-    return ReportFlowScaffold(
-      step: 0,
-      title: 'Report ready',
-      subtitle: report?.emergencyType != null
-          ? '${report!.emergencyType} · ${report.urgencyLevel ?? 'urgency unknown'}'
-          : null,
+    // The report is the end of the flow, so back means "done", not "undo".
+    // Without this, the phone's own back button walked the stack the flow left
+    // behind — type, method, photo — and asked for a report that already
+    // exists. Both the icon above and the hardware button land on tracking.
+    return BackTo(
       onBack: () => context.go(Routes.tracking),
-      bottomBar: _Actions(
-        sending: _sending,
-        sent: _sent,
-        canShare: _file != null,
-        onSend: _sendToHospital,
-        onShare: _share,
-        onRegenerate: _regenerate,
-      ),
-      body: Container(
-        decoration: BoxDecoration(
-          color: Resq.surface,
-          borderRadius: BorderRadius.circular(Resq.radiusCard),
-          border: Border.all(color: Resq.border),
+      child: ReportFlowScaffold(
+        step: 0,
+        title: 'Report ready',
+        subtitle: report?.emergencyType != null
+            ? '${report!.emergencyType} · ${report.urgencyLevel ?? 'urgency unknown'}'
+            : null,
+        onBack: () => context.go(Routes.tracking),
+        bottomBar: _Actions(
+          sending: _sending,
+          sent: _sent,
+          canShare: _file != null,
+          onSend: _sendToHospital,
+          onShare: _share,
+          onRegenerate: _regenerate,
         ),
-        clipBehavior: Clip.antiAlias,
-        child: _preview(),
+        body: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Where this report came from. The questions were answered before
+            // it was written, so there is nothing left to offer — this is
+            // provenance, and it is the line that tells someone their taps
+            // actually went into what the hospital is reading.
+            if ((report?.clarifications.isNotEmpty ?? false))
+              _Provenance(
+                answered: report!.answeredClarificationCount,
+                asked: report.clarifications.length,
+              ),
+            Expanded(
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Resq.surface,
+                  borderRadius: BorderRadius.circular(Resq.radiusCard),
+                  border: Border.all(color: Resq.border),
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: _preview(),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -214,6 +238,60 @@ class _ReportResultScreenState extends ConsumerState<ReportResultScreen> {
       autoSpacing: false,
       pageFling: false,
       onError: (e) => setState(() => _error = e.toString()),
+    );
+  }
+}
+
+/// What went into this report, stated plainly.
+///
+/// Worth a line of its own because the questions are the part of this flow a
+/// person did work for. Saying how many of their answers reached the hospital
+/// is the only acknowledgement they get, and it is also the honest caveat when
+/// they skipped: a report written from the description alone is a weaker
+/// document, and the reader of this screen is the one person who knows why.
+class _Provenance extends StatelessWidget {
+  const _Provenance({required this.answered, required this.asked});
+
+  final int answered;
+  final int asked;
+
+  @override
+  Widget build(BuildContext context) {
+    final all = answered == asked && asked > 0;
+    final none = answered == 0;
+    final color = none ? Resq.decision : Resq.ready;
+
+    final text = switch ((none, all)) {
+      (true, _) => 'Written from your description only — the questions were skipped.',
+      (_, true) => answered == 1
+          ? 'Written from your description and your answer.'
+          : 'Written from your description and all $answered of your answers.',
+      _ => 'Written from your description and $answered of $asked answers.',
+    };
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: Resq.space3),
+      child: Container(
+        padding: const EdgeInsets.all(Resq.space3),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.10),
+          borderRadius: BorderRadius.circular(Resq.radiusCard),
+          border: Border.all(color: color.withValues(alpha: 0.35)),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              none ? Icons.info_outline_rounded : Icons.check_circle_outline_rounded,
+              color: color,
+              size: 20,
+            ),
+            const SizedBox(width: Resq.space3),
+            Expanded(
+              child: Text(text, style: ResqType.caption(color: Resq.inkSoft)),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

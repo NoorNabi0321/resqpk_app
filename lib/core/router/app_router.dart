@@ -28,6 +28,7 @@ import '../../features/ai_report/screens/flow/report_method_screen.dart';
 import '../../features/ai_report/screens/flow/report_text_screen.dart';
 import '../../features/ai_report/screens/flow/report_voice_screen.dart';
 import '../../features/ai_report/screens/flow/report_generating_screen.dart';
+import '../../features/ai_report/screens/flow/report_clarify_screen.dart';
 import '../../features/ai_report/screens/flow/report_result_screen.dart';
 import '../../features/first_aid/screens/first_aid_screen.dart';
 import '../../features/first_aid/screens/guide_detail_screen.dart';
@@ -76,6 +77,9 @@ class Routes {
   static const String reportText = '/report/text';
   static const String reportVoice = '/report/voice';
   static const String reportGenerating = '/report/generating';
+  /// The refinement questions, asked after the report is already with the
+  /// hospital. Skippable from the first screen.
+  static const String reportClarify = '/report/clarify';
   static const String reportResult = '/report/result';
 
   // Driver
@@ -271,6 +275,10 @@ final appRouter = GoRouter(
     GoRoute(
       path: Routes.reportGenerating,
       pageBuilder: (c, s) => _page(ReportGeneratingScreen(caseId: s.extra as String? ?? '')),
+    ),
+    GoRoute(
+      path: Routes.reportClarify,
+      pageBuilder: (c, s) => _page(ReportClarifyScreen(caseId: s.extra as String? ?? '')),
     ),
     GoRoute(
       path: Routes.reportResult,

@@ -13,6 +13,8 @@ import '../../../core/theme/typography.dart';
 import '../../../core/widgets/back_guard.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../sos/data/models/dispatch_request_model.dart';
+import '../../sos/data/models/emergency_case_model.dart';
+import '../providers/driver_active_case_provider.dart';
 import '../providers/driver_history_provider.dart';
 import '../providers/driver_realtime_provider.dart';
 import '../widgets/driver_chrome.dart';
@@ -53,6 +55,8 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
     if (!mounted) return;
 
     if (result == 'accepted') {
+      // So that coming back here shows the run instead of an empty dashboard.
+      ref.invalidate(driverActiveCaseProvider);
       context.go(Routes.driverNavigation, extra: request.caseId);
     } else if (result == 'cancelled') {
       // Said plainly, because the alternative reading — that another driver
@@ -113,6 +117,7 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
         driverState.currentPosition;
     final user = ref.watch(currentUserProvider);
     final history = ref.watch(driverHistoryProvider);
+    final activeCase = ref.watch(driverActiveCaseProvider).asData?.value;
 
     final duty = !isConnected && !driverState.isOnline
         ? DutyState.connecting
@@ -138,10 +143,21 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
         body: RefreshIndicator(
           color: Resq.ready,
           backgroundColor: Resq.surface,
-          onRefresh: () async => ref.invalidate(driverHistoryProvider),
+          onRefresh: () async {
+            ref.invalidate(driverHistoryProvider);
+            ref.invalidate(driverActiveCaseProvider);
+          },
           child: ListView(
             padding: const EdgeInsets.only(bottom: Resq.space6),
             children: [
+              // Above everything, including the duty toggle: a patient already
+              // waiting on this driver outranks any decision on this screen.
+              if (activeCase != null)
+                _ResumeRunCard(
+                  activeCase: activeCase,
+                  onTap: () =>
+                      context.go(Routes.driverNavigation, extra: activeCase.id),
+                ),
               if (!hasInternet)
                 const _Warning(
                   icon: Icons.wifi_off_rounded,
@@ -263,6 +279,73 @@ class _StatsRow extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// The way back into a run that is still open.
+///
+/// Named for the patient rather than the case: "RQ-20261024-0007" tells a
+/// driver nothing, and the only question worth answering on this card is
+/// whether someone is still waiting on them.
+class _ResumeRunCard extends StatelessWidget {
+  const _ResumeRunCard({required this.activeCase, required this.onTap});
+
+  final EmergencyCaseModel activeCase;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final stage = switch (activeCase.status) {
+      'arrived' => 'You are at the patient',
+      'en_route' => 'Carrying the patient to hospital',
+      _ => 'On the way to the patient',
+    };
+    final where = activeCase.status == 'en_route'
+        ? (activeCase.hospitalName ?? 'the hospital')
+        : (activeCase.patientAddress ?? 'the pickup point');
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: Resq.space3),
+      child: DriverCard(
+        accent: Resq.critical,
+        onTap: onTap,
+        child: Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: Resq.critical.withValues(alpha: 0.16),
+                borderRadius: BorderRadius.circular(Resq.radiusControl),
+              ),
+              child: const Icon(Icons.navigation_rounded, color: Resq.critical, size: 21),
+            ),
+            const SizedBox(width: Resq.space3),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(stage, style: ResqType.bodyStrong(color: Resq.critical)),
+                  const SizedBox(height: 2),
+                  Text(
+                    where,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: ResqType.caption(color: Resq.inkMuted),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Tap to open the map again',
+                    style: ResqType.caption(color: Resq.inkSoft),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right_rounded, color: Resq.inkFaint),
+          ],
+        ),
+      ),
     );
   }
 }

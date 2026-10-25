@@ -66,7 +66,21 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final role = await _repo.getStoredRole() ?? user.role;
       state = state.copyWith(isAuthenticated: true, user: user, role: role);
     } catch (_) {
-      // Token is invalid/expired — clear and treat as logged out.
+      // A failed profile call is not the same as a rejected session, and
+      // treating it as one is what signed drivers out of their own app: the
+      // backend sleeps between runs, the first request after a cold start
+      // times out, and the session was thrown away — leaving a logged-in
+      // driver looking at the patient screens.
+      //
+      // The auth interceptor deletes the token on a genuine 401, so the token
+      // still being there means the server never said no. Come back up on the
+      // cached account and let the next call refresh it.
+      if (await _repo.isLoggedIn()) {
+        final cached = await _repo.getCachedUser();
+        final role = await _repo.getStoredRole() ?? cached?.role;
+        state = state.copyWith(isAuthenticated: true, user: cached, role: role);
+        return;
+      }
       await _repo.logout();
       state = const AuthState();
     }

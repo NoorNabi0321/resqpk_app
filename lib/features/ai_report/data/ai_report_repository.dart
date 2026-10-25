@@ -5,6 +5,47 @@ import 'package:dio/dio.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/realtime/socket_service.dart';
 import 'models/ai_report_model.dart';
+import 'models/clarification_model.dart';
+
+/// What came back from starting a report.
+///
+/// Two outcomes, and the caller has to handle both: either there are questions
+/// to put before anything is written, or there were none worth asking and the
+/// finished report is already here.
+class ReportStartResult {
+  const ReportStartResult({
+    required this.awaitingClarification,
+    this.clarifications = const [],
+    this.report,
+    this.transcribedText,
+  });
+
+  final bool awaitingClarification;
+  final List<ClarificationModel> clarifications;
+
+  /// Only set when no questions were asked — then this is the final report.
+  final AIReportModel? report;
+
+  /// What the voice note turned out to say. Shown on the questions screen so
+  /// someone can see their own words were heard before being asked more.
+  final String? transcribedText;
+}
+
+/// What came back from answering one question.
+class ClarificationAnswerResult {
+  const ClarificationAnswerResult({
+    required this.clarifications,
+    required this.remaining,
+    this.report,
+  });
+
+  final List<ClarificationModel> clarifications;
+  final int remaining;
+
+  /// Set only on the answer that closed the sequence: the record is written
+  /// and the hospital has it.
+  final AIReportModel? report;
+}
 
 class AIReportRepository {
   /// A reporter with no account holds only a case token, so every read here
@@ -13,9 +54,13 @@ class AIReportRepository {
   Map<String, String>? _caseHeader(String? caseToken) =>
       (caseToken == null || caseToken.isEmpty) ? null : {'Authorization': 'Bearer $caseToken'};
 
-  // POST /api/ai/report — multipart (voice + images + text). Uses the raw Dio
-  // instance because we need form-data with files and long timeouts.
-  Future<AIReportModel> generateReport({
+  /// POST /api/ai/report — multipart (voice + images + text).
+  ///
+  /// Starts the report; it does not finish one. The server analyses the inputs
+  /// and comes back with the questions to put before anything is written, so
+  /// nothing has reached the hospital when this returns. Uses the raw Dio
+  /// instance because we need form-data with files and long timeouts.
+  Future<ReportStartResult> startReport({
     required String caseId,
     String? audioFilePath,
     String? textInput,
@@ -72,14 +117,28 @@ class AIReportRepository {
       final data = (res.data is Map && res.data['data'] != null)
           ? res.data['data'] as Map<String, dynamic>
           : res.data as Map<String, dynamic>;
-      final report = AIReportModel.fromJson(data);
-      // A 200 from this endpoint means the report finished. Older backends
-      // omit generation_status, which would leave the model looking 'pending'
-      // and hide the result screen the patient just waited for.
-      if (!report.isComplete && (report.id != null || report.urgencyLevel != null)) {
-        return report.copyWith(generationStatus: 'completed');
+
+      if (data['generationStatus']?.toString() == 'awaiting_clarification') {
+        return ReportStartResult(
+          awaitingClarification: true,
+          clarifications: ClarificationModel.listFrom(data['clarifications']),
+          transcribedText: data['transcribedText']?.toString(),
+        );
       }
-      return report;
+
+      // No questions were worth asking, so this is the finished report.
+      final report = AIReportModel.fromJson(data);
+      // A 200 here with report fields means generation finished. Older
+      // backends omit generation_status, which would leave the model looking
+      // 'pending' and hide the result screen the patient just waited for.
+      final settled = !report.isComplete && (report.id != null || report.urgencyLevel != null)
+          ? report.copyWith(generationStatus: 'completed')
+          : report;
+      return ReportStartResult(
+        awaitingClarification: false,
+        report: settled,
+        transcribedText: settled.transcribedText,
+      );
     } catch (e) {
       throw Exception(_err(e));
     }
@@ -114,6 +173,97 @@ class AIReportRepository {
     } catch (e) {
       throw Exception(_err(e));
     }
+  }
+
+  /// GET /api/ai/report/:caseId/clarify — the questions still open.
+  ///
+  /// For resuming a sequence the app was part way through. Returns just the
+  /// questions rather than the whole report row, which carries the raw model
+  /// response and is far too heavy for this.
+  Future<List<ClarificationModel>> getOpenClarifications(
+    String caseId, {
+    String? caseToken,
+  }) async {
+    try {
+      final res = await apiClient.get(
+        '/api/ai/report/$caseId/clarify',
+        caseToken: caseToken,
+      );
+      final data = res['data'];
+      if (data is! Map) return const [];
+      return ClarificationModel.listFrom(data['clarifications']);
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 404) return const [];
+      throw Exception(_err(e));
+    } catch (e) {
+      throw Exception(_err(e));
+    }
+  }
+
+  /// POST /api/ai/report/:caseId/clarify — one single-tap answer.
+  ///
+  /// The answers are inputs to the report, not edits to one: nothing has been
+  /// written or sent yet. The answer that closes the sequence is the one that
+  /// makes the server write the record and deliver it, and that response
+  /// carries the finished report — which is why this call needs a long timeout.
+  Future<ClarificationAnswerResult> answerClarification(
+    String caseId, {
+    required String questionId,
+    required String answer,
+    String? caseToken,
+  }) async {
+    try {
+      final res = await apiClient.dio.post(
+        '/api/ai/report/$caseId/clarify',
+        data: {'questionId': questionId, 'answer': answer},
+        options: Options(
+          // The last answer generates the record and renders the PDF before
+          // responding. The default 30s would time out on exactly the request
+          // that matters most.
+          receiveTimeout: const Duration(seconds: 120),
+          headers: _caseHeader(caseToken),
+          extra: _caseHeader(caseToken) == null ? null : const {'caseScoped': true},
+        ),
+      );
+      return _answerResult(res.data);
+    } catch (e) {
+      throw Exception(_err(e));
+    }
+  }
+
+  /// POST /api/ai/report/:caseId/clarify/skip — stop asking, write the report.
+  ///
+  /// The deliberate skip. Whatever was answered still feeds the record; the
+  /// rest stays unreported. Returns the finished report.
+  Future<AIReportModel?> skipClarifications(String caseId, {String? caseToken}) async {
+    try {
+      final res = await apiClient.dio.post(
+        '/api/ai/report/$caseId/clarify/skip',
+        options: Options(
+          receiveTimeout: const Duration(seconds: 120),
+          headers: _caseHeader(caseToken),
+          extra: _caseHeader(caseToken) == null ? null : const {'caseScoped': true},
+        ),
+      );
+      return _answerResult(res.data).report;
+    } catch (e) {
+      throw Exception(_err(e));
+    }
+  }
+
+  ClarificationAnswerResult _answerResult(dynamic body) {
+    final data = (body is Map && body['data'] is Map)
+        ? Map<String, dynamic>.from(body['data'] as Map)
+        : (body is Map ? Map<String, dynamic>.from(body) : <String, dynamic>{});
+
+    final reportJson = data['report'];
+    return ClarificationAnswerResult(
+      clarifications: ClarificationModel.listFrom(data['clarifications']),
+      remaining: int.tryParse('${data['remaining']}') ?? 0,
+      report: reportJson is Map
+          ? AIReportModel.fromJson(Map<String, dynamic>.from(reportJson))
+          : null,
+    );
   }
 
   /// POST /api/ai/report/:caseId/send — push the report at the hospital again.

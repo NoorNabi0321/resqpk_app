@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -11,14 +10,15 @@ import '../../../../core/theme/typography.dart';
 import '../../providers/ai_report_provider.dart';
 import 'report_actions.dart';
 import 'report_flow_chrome.dart';
+import 'report_progress.dart';
 
-/// The wait.
+/// The first wait: working out what still needs asking.
 ///
-/// Transcription, analysis and the PDF take a few seconds each, and a bare
-/// spinner for that long reads as a hang. So the screen names the stage it is
-/// on. The stages are honest about what the server does, even though it does
-/// not report progress: they advance on time, and the bar never fills until
-/// the answer actually arrives.
+/// This screen does not produce a report. It sends the recording, the photo and
+/// the text, and the server comes back with the two to four questions it needs
+/// answered before it will write a clinical record. Nothing has reached the
+/// hospital when this finishes, and the screen says so — someone standing over
+/// a casualty is owed the truth about whether help has been told anything yet.
 class ReportGeneratingScreen extends ConsumerStatefulWidget {
   const ReportGeneratingScreen({super.key, required this.caseId});
 
@@ -29,11 +29,10 @@ class ReportGeneratingScreen extends ConsumerStatefulWidget {
 }
 
 class _ReportGeneratingScreenState extends ConsumerState<ReportGeneratingScreen> {
-  static const _stages = [
+  static const List<ReportStage> _stages = [
     (icon: Icons.upload_rounded, label: 'Sending what you gave us'),
     (icon: Icons.graphic_eq_rounded, label: 'Listening and reading'),
-    (icon: Icons.psychology_rounded, label: 'Working out what the hospital needs'),
-    (icon: Icons.picture_as_pdf_rounded, label: 'Writing the report'),
+    (icon: Icons.psychology_rounded, label: 'Working out what is missing'),
   ];
 
   int _stage = 0;
@@ -45,12 +44,26 @@ class _ReportGeneratingScreenState extends ConsumerState<ReportGeneratingScreen>
     super.initState();
     // Submit once, on the way in. Riverpod keeps the notifier alive, so the
     // upload survives this screen being rebuilt.
-    Future.microtask(() => ref.read(aiReportProvider.notifier).submitReport(widget.caseId));
+    Future.microtask(_start);
 
     _ticker = Timer.periodic(const Duration(milliseconds: 2200), (_) {
       if (!mounted) return;
       setState(() => _stage = (_stage + 1).clamp(0, _stages.length - 1));
     });
+  }
+
+  Future<void> _start() async {
+    final hasQuestions = await ref.read(aiReportProvider.notifier).submitReport(widget.caseId);
+    if (!mounted || _navigated) return;
+    if (ref.read(aiReportProvider).error != null) return; // the failure UI below
+
+    _navigated = true;
+    // Questions first. Only when there were none worth asking does the record
+    // get written straight away, and then the document is already waiting.
+    context.pushReplacement(
+      hasQuestions ? Routes.reportClarify : Routes.reportResult,
+      extra: widget.caseId,
+    );
   }
 
   @override
@@ -62,21 +75,11 @@ class _ReportGeneratingScreenState extends ConsumerState<ReportGeneratingScreen>
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(aiReportProvider);
-
-    // Done — or failed. Either way, stop pretending to work.
-    ref.listen(aiReportProvider, (_, next) {
-      if (_navigated || !mounted) return;
-      if (next.report?.isComplete == true) {
-        _navigated = true;
-        context.pushReplacement(Routes.reportResult, extra: widget.caseId);
-      }
-    });
-
     final failed = state.error != null && !state.isSubmitting;
 
     return ReportFlowScaffold(
       step: 0,
-      title: failed ? 'That did not work' : 'Building the report',
+      title: failed ? 'That did not work' : 'Reading what you told us',
       onBack: failed ? () => context.pop() : null,
       bottomBar: failed
           ? ReportActions(
@@ -89,99 +92,19 @@ class _ReportGeneratingScreenState extends ConsumerState<ReportGeneratingScreen>
                 ReportAction(
                   icon: Icons.refresh_rounded,
                   tooltip: 'Try again',
-                  onPressed: () =>
-                      ref.read(aiReportProvider.notifier).submitReport(widget.caseId),
+                  onPressed: _start,
                   filled: true,
                 ),
               ],
             )
           : null,
-      body: failed ? _Failure(message: state.error!) : _Working(stage: _stage, stages: _stages),
-    );
-  }
-}
-
-class _Working extends StatelessWidget {
-  const _Working({required this.stage, required this.stages});
-
-  final int stage;
-  final List<({IconData icon, String label})> stages;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Center(
-          child: SizedBox(
-            width: 180,
-            height: 180,
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                const SizedBox(
-                  width: 180,
-                  height: 180,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 3,
-                    color: Resq.brandInk,
-                    backgroundColor: Resq.surfaceAlt,
-                  ),
-                ),
-                Container(
-                  width: 120,
-                  height: 120,
-                  decoration: const BoxDecoration(
-                    color: Resq.brandTint,
-                    shape: BoxShape.circle,
-                  ),
-                  child: AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 300),
-                    child: Icon(
-                      stages[stage].icon,
-                      key: ValueKey(stage),
-                      size: 52,
-                      color: Resq.brandInk,
-                    ),
-                  ),
-                ),
-              ],
+      body: failed
+          ? _Failure(message: state.error!)
+          : ReportProgress(
+              stage: _stage,
+              stages: _stages,
+              footnote: 'A few quick questions next, then the hospital gets the report.',
             ),
-          ),
-        ),
-        const SizedBox(height: Resq.space6),
-        for (var i = 0; i < stages.length; i++)
-          Padding(
-            padding: const EdgeInsets.only(bottom: Resq.space3),
-            child: Row(
-              children: [
-                Icon(
-                  i < stage
-                      ? Icons.check_circle_rounded
-                      : (i == stage ? Icons.adjust_rounded : Icons.circle_outlined),
-                  size: 18,
-                  color: i <= stage ? Resq.ready : Resq.inkFaint,
-                ),
-                const SizedBox(width: Resq.space3),
-                Expanded(
-                  child: Text(
-                    stages[i].label,
-                    style: i == stage
-                        ? ResqType.bodyStrong()
-                        : ResqType.body(color: i < stage ? Resq.inkSoft : Resq.inkFaint),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        const SizedBox(height: Resq.space4),
-        Text(
-          'This usually takes about ten seconds.',
-          textAlign: TextAlign.center,
-          style: ResqType.caption(),
-        ).animate(onPlay: (c) => c.repeat(reverse: true)).fadeIn(duration: 1200.ms),
-      ],
     );
   }
 }
