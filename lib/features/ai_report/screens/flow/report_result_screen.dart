@@ -20,10 +20,9 @@ import 'report_flow_chrome.dart';
 
 /// The finished report: what it says, and where it can go.
 ///
-/// The hospital already has it — the pipeline sends it the moment it is ready —
-/// so "Send to hospital" here is a re-send for the case where staff say they
-/// cannot see it. Sharing is separate and goes wherever the family is:
-/// WhatsApp, mostly.
+/// The hospital is sent it as it is written, so "Send to hospital" here is a
+/// re-send for the case where staff say they cannot see it. Sharing is separate
+/// and goes wherever the family is: WhatsApp, mostly.
 class ReportResultScreen extends ConsumerStatefulWidget {
   const ReportResultScreen({super.key, required this.caseId});
 
@@ -70,13 +69,16 @@ class _ReportResultScreenState extends ConsumerState<ReportResultScreen> {
       _error = null;
     });
     try {
-      // The PDF is rendered and uploaded moments after the JSON report is
-      // saved, so a first request can legitimately 404. Retry briefly rather
-      // than telling someone it failed.
+      // The PDF is rendered and uploaded moments after the record is saved, so
+      // a first request can legitimately 404. Retry rather than telling someone
+      // it failed — and for long enough to cover a cold backend waking up,
+      // because the alternative is a "Try again" button over a report that was
+      // about to arrive.
       String? url;
-      for (var attempt = 0; attempt < 6 && url == null; attempt++) {
+      for (var attempt = 0; attempt < 10 && url == null; attempt++) {
         url = await _repo.getReportPdfUrl(widget.caseId, caseToken: _caseToken);
-        if (url == null) await Future<void>.delayed(const Duration(seconds: 2));
+        if (!mounted) return;
+        if (url == null) await Future<void>.delayed(const Duration(seconds: 3));
         if (!mounted) return;
       }
       if (url == null) throw Exception('The report is still being prepared.');
@@ -215,7 +217,8 @@ class _ReportResultScreenState extends ConsumerState<ReportResultScreen> {
               ),
               const SizedBox(height: Resq.space2),
               Text(
-                'The hospital already has it — this is only the copy for you.',
+                'Your answers were sent. This is only the copy for you — '
+                'tap Try again, or send it to the hospital with the red button.',
                 textAlign: TextAlign.center,
                 style: ResqType.caption(),
               ),
