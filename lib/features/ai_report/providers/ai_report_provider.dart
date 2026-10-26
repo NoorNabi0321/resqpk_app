@@ -343,99 +343,65 @@ class AIReportNotifier extends StateNotifier<AIReportState> {
     }
   }
 
-  /// Records one single-tap answer.
+  /// Sends every answer at once and takes the finished report into state.
   ///
-  /// Returns false when the answer did not land, so the screen can stay on the
-  /// question rather than moving on and losing it. Nothing has been written or
-  /// sent at this point, so a failed answer costs one field and no one at the
-  /// hospital is reading anything yet.
+  /// The taps themselves never touch the network — they are held on the phone
+  /// and arrive here together, which is what removed the window where the
+  /// server's deadline could close a sequence between two questions and start
+  /// rejecting answers from someone who was visibly still giving them.
   ///
-  /// The answer that closes the sequence is the one that makes the server write
-  /// the record and deliver it; that response carries the finished report, and
-  /// [AIReportState.isFinalising] is true while it is in flight.
-  Future<bool> answerClarification(
+  /// An empty map is the skip, and a legitimate ending: the record is then
+  /// written from the description alone. Returns false only when nothing could
+  /// be sent at all.
+  Future<bool> submitClarifications(
     String caseId, {
-    required String questionId,
-    required String answer,
+    Map<String, String> answers = const {},
   }) async {
-    final last = state.openClarifications.length <= 1;
-    state = state.copyWith(
-      isAnswering: true,
-      isFinalising: last,
-      clearError: true,
-    );
+    state = state.copyWith(isFinalising: true, clearError: true);
     try {
-      final result = await _repository.answerClarification(
+      final report = await _repository.submitClarifications(
         caseId,
-        questionId: questionId,
-        answer: answer,
+        answers: answers,
         caseToken: _caseToken(caseId),
       );
       state = state.copyWith(
-        clarifications: result.clarifications.isEmpty
-            ? state.clarifications
-            : result.clarifications,
-        report: result.report,
-        awaitingClarification: result.report == null,
+        report: report,
+        awaitingClarification: false,
         recordingStatus:
-            result.report != null ? RecordingStatus.completed : state.recordingStatus,
-        isAnswering: false,
+            report != null ? RecordingStatus.completed : state.recordingStatus,
         isFinalising: false,
       );
       return true;
     } on ClarificationClosedException {
-      // The deadline, or a tap that landed first. The report exists — the
-      // screen should show it rather than complain about a race nobody lost.
+      // The deadline got there first. The record exists — the screen should
+      // show it rather than complain about a race nobody lost.
       state = state.copyWith(
         clarificationClosed: true,
         awaitingClarification: false,
-        isAnswering: false,
         isFinalising: false,
       );
       return false;
     } catch (e) {
       state = state.copyWith(
         error: e.toString().replaceFirst('Exception: ', ''),
-        isAnswering: false,
         isFinalising: false,
       );
       return false;
     }
   }
 
-  /// Closes the sequence and has the record written from whatever is known.
+  /// Tells the server the question screen is still open.
   ///
-  /// This is the deliberate skip, and it is what bounds the delay asking first
-  /// imposes: one tap and the hospital has its report. Not fire-and-forget —
-  /// the report does not exist until this returns, so the screen has to wait
-  /// for it. Returns false if it failed, leaving the questions where they were.
-  Future<bool> skipClarifications(String caseId) async {
-    state = state.copyWith(isFinalising: true, clearError: true);
+  /// With the answers buffered on the phone, nothing else reaches the server
+  /// between the questions appearing and the sequence ending — so without this,
+  /// someone reading carefully is indistinguishable from a phone that has
+  /// stopped, and gets swept. Entirely best-effort: a missed ping costs one
+  /// interval of the deadline, and the screen must never stall on it.
+  Future<void> pingClarification(String caseId) async {
     try {
-      final report = await _repository.skipClarifications(
-        caseId,
-        caseToken: _caseToken(caseId),
-      );
-      state = state.copyWith(
-        report: report,
-        awaitingClarification: false,
-        recordingStatus: report != null ? RecordingStatus.completed : state.recordingStatus,
-        isFinalising: false,
-      );
-      return true;
-    } on ClarificationClosedException {
-      state = state.copyWith(
-        clarificationClosed: true,
-        awaitingClarification: false,
-        isFinalising: false,
-      );
-      return false;
-    } catch (e) {
-      state = state.copyWith(
-        error: e.toString().replaceFirst('Exception: ', ''),
-        isFinalising: false,
-      );
-      return false;
+      await _repository.getOpenClarifications(caseId, caseToken: _caseToken(caseId));
+    } catch (_) {
+      // Offline, or the sequence already closed. Either way, nothing to do.
     }
   }
 

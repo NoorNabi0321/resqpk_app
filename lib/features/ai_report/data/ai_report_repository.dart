@@ -246,6 +246,43 @@ class AIReportRepository {
     }
   }
 
+  /// POST /api/ai/report/:caseId/clarify/submit — every answer at once.
+  ///
+  /// How the app finishes a sequence. The taps are held on the phone and sent
+  /// together, so there is no round trip between two questions and no window in
+  /// which the server's deadline can close the sequence under someone who is
+  /// visibly still answering. An empty map is the skip.
+  ///
+  /// The server records the answers, generates the record and delivers it
+  /// before replying, which is why this needs a long timeout.
+  Future<AIReportModel?> submitClarifications(
+    String caseId, {
+    required Map<String, String> answers,
+    String? caseToken,
+  }) async {
+    try {
+      final res = await apiClient.dio.post(
+        '/api/ai/report/$caseId/clarify/submit',
+        data: {
+          'answers': answers.entries
+              .map((e) => {'questionId': e.key, 'answer': e.value})
+              .toList(),
+        },
+        options: Options(
+          receiveTimeout: const Duration(seconds: 120),
+          headers: _caseHeader(caseToken),
+          extra: _caseHeader(caseToken) == null ? null : const {'caseScoped': true},
+        ),
+      );
+      return _answerResult(res.data).report;
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 409) throw const ClarificationClosedException();
+      throw Exception(_err(e));
+    } catch (e) {
+      throw Exception(_err(e));
+    }
+  }
+
   /// POST /api/ai/report/:caseId/clarify/skip — stop asking, write the report.
   ///
   /// The deliberate skip. Whatever was answered still feeds the record; the

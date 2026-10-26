@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -39,19 +41,38 @@ class _ReportClarifyScreenState extends ConsumerState<ReportClarifyScreen> {
     (icon: Icons.local_hospital_rounded, label: 'Sending it to the hospital'),
   ];
 
-  /// The questions this screen started with, captured once. Held as an index
-  /// into a fixed list rather than always showing the first unanswered
-  /// question, so a failed answer does not look like progress.
+  /// The questions this screen started with, captured once.
   late List<ClarificationModel> _questions;
   int _index = 0;
-  String? _pending;
   bool _resuming = false;
+
+  /// The answers, held here until the sequence ends.
+  ///
+  /// Nothing is sent per tap. A tap used to be a network round trip against a
+  /// deadline that kept running while you read the next question, so a careful
+  /// reader could have every answer rejected — three consecutive test runs
+  /// reached the hospital with nothing answered for exactly that reason. The
+  /// taps are instant now and the whole set goes at the end.
+  final Map<String, String> _answers = {};
+
+  /// Keeps the server from mistaking a reader for a dead phone.
+  Timer? _ping;
 
   @override
   void initState() {
     super.initState();
     _questions = ref.read(aiReportProvider).openClarifications;
     if (_questions.isEmpty) Future.microtask(_recover);
+    _ping = Timer.periodic(
+      const Duration(seconds: 30),
+      (_) => ref.read(aiReportProvider.notifier).pingClarification(widget.caseId),
+    );
+  }
+
+  @override
+  void dispose() {
+    _ping?.cancel();
+    super.dispose();
   }
 
   /// Reached this screen with no questions in memory — the app was killed part
@@ -78,14 +99,19 @@ class _ReportClarifyScreenState extends ConsumerState<ReportClarifyScreen> {
     context.pushReplacement(Routes.reportResult, extra: widget.caseId);
   }
 
-  /// Skip: close the sequence and have the report written now.
+  /// Ends the sequence: sends whatever has been answered and has the record
+  /// written. Reached by the skip button, by back, and by the last answer.
   ///
-  /// Not an abandonment path — it is the designed escape, and the thing that
-  /// bounds the delay asking first imposes. Answers already given still count.
-  Future<void> _skip() async {
-    final ok = await ref.read(aiReportProvider.notifier).skipClarifications(widget.caseId);
+  /// Skipping is not an abandonment path — it is the designed escape, and the
+  /// thing that bounds the delay asking first imposes. Answers already given
+  /// still count towards the record.
+  Future<void> _finish() async {
+    _ping?.cancel();
+    final ok = await ref
+        .read(aiReportProvider.notifier)
+        .submitClarifications(widget.caseId, answers: Map.of(_answers));
     if (!mounted) return;
-    // Closed under us, or sent: either way the report exists.
+    // Sent, or closed under us: either way the report exists.
     if (ok || ref.read(aiReportProvider).clarificationClosed) {
       _toResult();
       return;
@@ -93,37 +119,11 @@ class _ReportClarifyScreenState extends ConsumerState<ReportClarifyScreen> {
     _complain('The report could not be sent. Try again.');
   }
 
-  Future<void> _answer(ClarificationModel question, String option) async {
-    setState(() => _pending = option);
-    final ok = await ref.read(aiReportProvider.notifier).answerClarification(
-          widget.caseId,
-          questionId: question.id,
-          answer: option,
-        );
-    if (!mounted) return;
-    setState(() => _pending = null);
-
-    // The sequence closed while this screen was open — the deadline passed, or
-    // a tap landed first. The report exists, so show it instead of telling
-    // someone their answer was refused.
-    if (ref.read(aiReportProvider).clarificationClosed) {
-      _toResult();
-      return;
-    }
-
-    if (!ok) {
-      _complain('That answer did not get through. Nothing is lost — try again.');
-      return;
-    }
-
-    // The last answer writes the record, so the notifier now holds the report.
-    if (ref.read(aiReportProvider).report != null) {
-      _toResult();
-      return;
-    }
-
+  /// One tap. Local only — no network, no spinner, no way to fail.
+  void _answer(ClarificationModel question, String option) {
+    _answers[question.id] = option;
     if (_index + 1 >= _questions.length) {
-      await _recover();
+      _finish();
       return;
     }
     setState(() => _index += 1);
@@ -160,14 +160,13 @@ class _ReportClarifyScreenState extends ConsumerState<ReportClarifyScreen> {
     }
 
     final question = _questions[_index];
-    final busy = state.isAnswering;
     final urdu = _urdu(question);
     final options = question.displayOptions();
 
     return BackTo(
       // Back means "stop asking and send it", not back through the flow that
       // made the recording. There is no report to go back to yet.
-      onBack: _skip,
+      onBack: _finish,
       child: Scaffold(
         backgroundColor: Resq.canvas,
         body: SafeArea(
@@ -177,7 +176,7 @@ class _ReportClarifyScreenState extends ConsumerState<ReportClarifyScreen> {
               _Header(
                 index: _index,
                 total: _questions.length,
-                onBack: busy ? null : _skip,
+                onBack: _finish,
               ),
               Expanded(
                 child: ListView(
@@ -210,8 +209,6 @@ class _ReportClarifyScreenState extends ConsumerState<ReportClarifyScreen> {
                           label: options[i],
                           position: i,
                           urdu: urdu,
-                          busy: busy && _pending == question.answerFor(i),
-                          enabled: !busy,
                           onTap: () => _answer(question, question.answerFor(i)),
                         )
                             .animate(key: ValueKey('q${question.id}o$i'))
@@ -221,7 +218,7 @@ class _ReportClarifyScreenState extends ConsumerState<ReportClarifyScreen> {
                   ],
                 ),
               ),
-              _SkipBar(onSkip: busy ? null : _skip),
+              _SkipBar(onSkip: _finish),
             ],
           ),
         ),
@@ -290,16 +287,12 @@ class _OptionCard extends StatefulWidget {
     required this.label,
     required this.position,
     required this.urdu,
-    required this.busy,
-    required this.enabled,
     required this.onTap,
   });
 
   final String label;
   final int position;
   final bool urdu;
-  final bool busy;
-  final bool enabled;
   final VoidCallback onTap;
 
   @override
@@ -311,14 +304,16 @@ class _OptionCardState extends State<_OptionCard> {
 
   @override
   Widget build(BuildContext context) {
-    final active = widget.busy;
-    final dim = !widget.enabled && !widget.busy;
+    // Held down, rather than waiting on a request. A tap is local now: it
+    // records the answer and moves to the next question in the same frame,
+    // so there is no in-flight state for a card to show.
+    final active = _down;
 
     return GestureDetector(
-      onTapDown: widget.enabled ? (_) => setState(() => _down = true) : null,
-      onTapUp: widget.enabled ? (_) => setState(() => _down = false) : null,
-      onTapCancel: widget.enabled ? () => setState(() => _down = false) : null,
-      onTap: widget.enabled ? widget.onTap : null,
+      onTapDown: (_) => setState(() => _down = true),
+      onTapUp: (_) => setState(() => _down = false),
+      onTapCancel: () => setState(() => _down = false),
+      onTap: widget.onTap,
       child: AnimatedScale(
         // Presses back under the thumb. On a screen where every control looks
         // the same, the feel of the press is what confirms the tap landed.
@@ -339,7 +334,7 @@ class _OptionCardState extends State<_OptionCard> {
               color: active ? Resq.critical : Resq.border,
               width: active ? 2 : 1.4,
             ),
-            boxShadow: _down || dim
+            boxShadow: _down
                 ? null
                 : [
                     BoxShadow(
@@ -352,33 +347,23 @@ class _OptionCardState extends State<_OptionCard> {
           child: Row(
             textDirection: widget.urdu ? TextDirection.rtl : TextDirection.ltr,
             children: [
-              _Badge(position: widget.position, active: active, dim: dim),
+              _Badge(position: widget.position, active: active),
               const SizedBox(width: Resq.space4),
               Expanded(
                 child: Text(
                   widget.label,
                   textAlign: widget.urdu ? TextAlign.right : TextAlign.left,
                   style: widget.urdu
-                      ? ResqType.nastaliq(size: 19, color: dim ? Resq.inkFaint : Resq.ink)
-                      : ResqType.bodyStrong(color: dim ? Resq.inkFaint : Resq.ink)
+                      ? ResqType.nastaliq(size: 19, color: Resq.ink)
+                      : ResqType.bodyStrong(color: Resq.ink)
                           .copyWith(fontSize: 18, height: 1.3),
                 ),
               ),
               const SizedBox(width: Resq.space2),
-              SizedBox(
-                width: 22,
-                height: 22,
-                child: active
-                    ? const CircularProgressIndicator(
-                        strokeWidth: 2.4,
-                        color: Resq.critical,
-                      )
-                    : Icon(
-                        widget.urdu
-                            ? Icons.chevron_left_rounded
-                            : Icons.chevron_right_rounded,
-                        color: dim ? Resq.surfaceAlt : Resq.inkFaint,
-                      ),
+              Icon(
+                widget.urdu ? Icons.chevron_left_rounded : Icons.chevron_right_rounded,
+                color: active ? Resq.critical : Resq.inkFaint,
+                size: 22,
               ),
             ],
           ),
@@ -391,11 +376,10 @@ class _OptionCardState extends State<_OptionCard> {
 /// A, B, C down the left. Gives the eye somewhere to land and makes the options
 /// countable without reading them.
 class _Badge extends StatelessWidget {
-  const _Badge({required this.position, required this.active, required this.dim});
+  const _Badge({required this.position, required this.active});
 
   final int position;
   final bool active;
-  final bool dim;
 
   @override
   Widget build(BuildContext context) {
@@ -411,7 +395,7 @@ class _Badge extends StatelessWidget {
       child: Text(
         String.fromCharCode(65 + position),
         style: ResqType.bodyStrong(
-          color: active ? Colors.white : (dim ? Resq.inkFaint : Resq.inkSoft),
+          color: active ? Colors.white : Resq.inkSoft,
         ).copyWith(fontSize: 15),
       ),
     );
