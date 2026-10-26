@@ -39,6 +39,10 @@ class AIReportState {
   /// A single answer is in flight.
   final bool isAnswering;
 
+  /// The sequence closed under us — the deadline, or another tap. The report
+  /// exists; there is nothing left to ask and nothing went wrong.
+  final bool clarificationClosed;
+
   /// The answer that closed the sequence is in flight, so the record is being
   /// written right now. Separate from [isAnswering] because the wait is ten
   /// seconds rather than one and the screen has to say something different.
@@ -58,6 +62,7 @@ class AIReportState {
     this.awaitingClarification = false,
     this.isAnswering = false,
     this.isFinalising = false,
+    this.clarificationClosed = false,
   });
 
   bool get hasAnyInput =>
@@ -83,6 +88,7 @@ class AIReportState {
     bool? awaitingClarification,
     bool? isAnswering,
     bool? isFinalising,
+    bool? clarificationClosed,
     bool clearAudio = false,
     bool clearReport = false,
     bool clearError = false,
@@ -101,6 +107,7 @@ class AIReportState {
       awaitingClarification: awaitingClarification ?? this.awaitingClarification,
       isAnswering: isAnswering ?? this.isAnswering,
       isFinalising: isFinalising ?? this.isFinalising,
+      clarificationClosed: clarificationClosed ?? this.clarificationClosed,
     );
   }
 }
@@ -376,6 +383,16 @@ class AIReportNotifier extends StateNotifier<AIReportState> {
         isFinalising: false,
       );
       return true;
+    } on ClarificationClosedException {
+      // The deadline, or a tap that landed first. The report exists — the
+      // screen should show it rather than complain about a race nobody lost.
+      state = state.copyWith(
+        clarificationClosed: true,
+        awaitingClarification: false,
+        isAnswering: false,
+        isFinalising: false,
+      );
+      return false;
     } catch (e) {
       state = state.copyWith(
         error: e.toString().replaceFirst('Exception: ', ''),
@@ -406,6 +423,13 @@ class AIReportNotifier extends StateNotifier<AIReportState> {
         isFinalising: false,
       );
       return true;
+    } on ClarificationClosedException {
+      state = state.copyWith(
+        clarificationClosed: true,
+        awaitingClarification: false,
+        isFinalising: false,
+      );
+      return false;
     } catch (e) {
       state = state.copyWith(
         error: e.toString().replaceFirst('Exception: ', ''),

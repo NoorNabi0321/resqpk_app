@@ -31,6 +31,18 @@ class ReportStartResult {
   final String? transcribedText;
 }
 
+/// The sequence is over and a report already exists.
+///
+/// Thrown when the server answers 409: the deadline closed the questions, or
+/// another tap got there first. Not an error the person caused and not one they
+/// can do anything about — the report they were working towards exists, so the
+/// only sensible response is to show it to them.
+class ClarificationClosedException implements Exception {
+  const ClarificationClosedException();
+  @override
+  String toString() => 'The report has already been written';
+}
+
 /// What came back from answering one question.
 class ClarificationAnswerResult {
   const ClarificationAnswerResult({
@@ -226,6 +238,9 @@ class AIReportRepository {
         ),
       );
       return _answerResult(res.data);
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 409) throw const ClarificationClosedException();
+      throw Exception(_err(e));
     } catch (e) {
       throw Exception(_err(e));
     }
@@ -246,6 +261,9 @@ class AIReportRepository {
         ),
       );
       return _answerResult(res.data).report;
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 409) throw const ClarificationClosedException();
+      throw Exception(_err(e));
     } catch (e) {
       throw Exception(_err(e));
     }

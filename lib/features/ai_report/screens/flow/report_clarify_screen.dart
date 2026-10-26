@@ -14,16 +14,15 @@ import 'report_progress.dart';
 
 /// The questions, asked before the report is written.
 ///
-/// Nothing has reached the hospital yet, and that is deliberate. A report
+/// Nothing has reached the hospital yet, and that is deliberate: a report
 /// written from the description alone fills its gaps with inference, and a PDF
-/// is read as a clinical record whether or not it carries a caveat — so the
-/// questions come first and the record is written once, from the answers.
+/// is read as a clinical record whether or not it carries a caveat.
 ///
-/// The cost of that choice is the seconds spent here, which is why Skip is a
-/// plain visible button on every question rather than a greyed-out
-/// afterthought: one tap and the hospital has its report. Leaving by any route
-/// is a legitimate ending, and the server closes the sequence by itself if the
-/// phone never comes back.
+/// The screen is one question and its answers, and nothing else. It used to
+/// carry three lines explaining the design above the question, which is text
+/// nobody standing over a casualty is going to read and which pushed the first
+/// answer towards the middle of the screen. What is actually needed is the
+/// question, the things you can tap, and a way out.
 class ReportClarifyScreen extends ConsumerStatefulWidget {
   const ReportClarifyScreen({super.key, required this.caseId});
 
@@ -64,8 +63,6 @@ class _ReportClarifyScreenState extends ConsumerState<ReportClarifyScreen> {
         await ref.read(aiReportProvider.notifier).resumeClarification(widget.caseId);
     if (!mounted) return;
     if (!resumed) {
-      // Nothing outstanding: either the record is written or the sequence timed
-      // out and the server wrote it without us.
       _toResult();
       return;
     }
@@ -83,16 +80,17 @@ class _ReportClarifyScreenState extends ConsumerState<ReportClarifyScreen> {
 
   /// Skip: close the sequence and have the report written now.
   ///
-  /// Not an abandonment path — it is the designed escape, and the one that
-  /// keeps the blocking sequence honest. Answers already given still count.
+  /// Not an abandonment path — it is the designed escape, and the thing that
+  /// bounds the delay asking first imposes. Answers already given still count.
   Future<void> _skip() async {
     final ok = await ref.read(aiReportProvider.notifier).skipClarifications(widget.caseId);
     if (!mounted) return;
-    if (!ok) {
-      _complain('The report could not be sent. Try again.');
+    // Closed under us, or sent: either way the report exists.
+    if (ok || ref.read(aiReportProvider).clarificationClosed) {
+      _toResult();
       return;
     }
-    _toResult();
+    _complain('The report could not be sent. Try again.');
   }
 
   Future<void> _answer(ClarificationModel question, String option) async {
@@ -104,6 +102,14 @@ class _ReportClarifyScreenState extends ConsumerState<ReportClarifyScreen> {
         );
     if (!mounted) return;
     setState(() => _pending = null);
+
+    // The sequence closed while this screen was open — the deadline passed, or
+    // a tap landed first. The report exists, so show it instead of telling
+    // someone their answer was refused.
+    if (ref.read(aiReportProvider).clarificationClosed) {
+      _toResult();
+      return;
+    }
 
     if (!ok) {
       _complain('That answer did not get through. Nothing is lost — try again.');
@@ -117,8 +123,6 @@ class _ReportClarifyScreenState extends ConsumerState<ReportClarifyScreen> {
     }
 
     if (_index + 1 >= _questions.length) {
-      // Answered everything this screen knew about but the server still has
-      // something open — ask it what.
       await _recover();
       return;
     }
@@ -157,62 +161,289 @@ class _ReportClarifyScreenState extends ConsumerState<ReportClarifyScreen> {
 
     final question = _questions[_index];
     final busy = state.isAnswering;
+    final urdu = _urdu(question);
+    final options = question.displayOptions();
 
     return BackTo(
       // Back means "stop asking and send it", not back through the flow that
       // made the recording. There is no report to go back to yet.
       onBack: _skip,
-      child: ReportFlowScaffold(
-        step: _index + 1,
-        totalSteps: _questions.length,
-        title: 'Before we send it',
-        subtitle: 'The hospital has not been sent anything yet. These answers go '
-            'into the report — you can send it without them at any time.',
-        onBack: _skip,
-        bottomBar: TextButton(
-          onPressed: busy ? null : _skip,
-          child: Text(
-            _index == 0 ? 'Skip and send the report now' : 'That is all I know — send it',
-            style: ResqType.button(color: Resq.brandInk),
+      child: Scaffold(
+        backgroundColor: Resq.canvas,
+        body: SafeArea(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _Header(
+                index: _index,
+                total: _questions.length,
+                onBack: busy ? null : _skip,
+              ),
+              Expanded(
+                child: ListView(
+                  physics: const BouncingScrollPhysics(),
+                  padding: const EdgeInsets.fromLTRB(
+                    Resq.space5,
+                    Resq.space4,
+                    Resq.space5,
+                    Resq.space4,
+                  ),
+                  children: [
+                    Directionality(
+                      textDirection: urdu ? TextDirection.rtl : TextDirection.ltr,
+                      child: Text(
+                        question.displayQuestion(),
+                        style: urdu
+                            ? ResqType.nastaliq(size: 27)
+                            : ResqType.display(color: Resq.ink)
+                                .copyWith(fontSize: 29, height: 1.2, letterSpacing: -0.4),
+                      ),
+                    )
+                        .animate(key: ValueKey('q${question.id}'))
+                        .fadeIn(duration: 260.ms)
+                        .slideY(begin: 0.12, end: 0, curve: Curves.easeOutCubic),
+                    const SizedBox(height: Resq.space6),
+                    for (var i = 0; i < options.length; i++)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: Resq.space3),
+                        child: _OptionCard(
+                          label: options[i],
+                          position: i,
+                          urdu: urdu,
+                          busy: busy && _pending == question.answerFor(i),
+                          enabled: !busy,
+                          onTap: () => _answer(question, question.answerFor(i)),
+                        )
+                            .animate(key: ValueKey('q${question.id}o$i'))
+                            .fadeIn(delay: (70 * i + 110).ms, duration: 240.ms)
+                            .slideY(begin: 0.16, end: 0, curve: Curves.easeOutCubic),
+                      ),
+                  ],
+                ),
+              ),
+              _SkipBar(onSkip: busy ? null : _skip),
+            ],
           ),
         ),
-        body: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // Shown in the language they gave the description in. Urdu needs
-            // its own face and right-to-left, or it renders as a wall of
-            // mis-shaped glyphs — the same reason the typed screen switches.
-            Directionality(
-              textDirection: _urdu(question) ? TextDirection.rtl : TextDirection.ltr,
-              child: Text(
-                question.displayQuestion(),
-                style: _urdu(question)
-                    ? ResqType.nastaliq(size: 25)
-                    : ResqType.display(color: Resq.ink)
-                        .copyWith(fontSize: 26, height: 1.25),
-              ),
-            ).animate(key: ValueKey('q${question.id}')).fadeIn(duration: 220.ms),
-            const SizedBox(height: Resq.space5),
-            Expanded(
-              child: ListView.separated(
-                itemCount: question.options.length,
-                separatorBuilder: (_, __) => const SizedBox(height: Resq.space3),
-                itemBuilder: (_, i) {
-                  // Read in their language, recorded in English. The tap is
-                  // resolved by position, so the two never have to be matched.
-                  final shown = question.displayOptions()[i];
-                  final recorded = question.answerFor(i);
-                  return _OptionButton(
-                    label: shown,
-                    urdu: _urdu(question),
-                    busy: busy && _pending == recorded,
-                    enabled: !busy,
-                    onTap: () => _answer(question, recorded),
-                  );
-                },
+      ),
+    );
+  }
+}
+
+/// Back, and how far through you are. No title: the question below is the
+/// title, and a heading above it would only compete with it.
+class _Header extends StatelessWidget {
+  const _Header({required this.index, required this.total, required this.onBack});
+
+  final int index;
+  final int total;
+  final VoidCallback? onBack;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(Resq.space2, Resq.space2, Resq.space5, 0),
+      child: Row(
+        children: [
+          IconButton(
+            onPressed: onBack,
+            icon: const Icon(Icons.arrow_back_rounded, color: Resq.ink),
+            constraints: const BoxConstraints(
+              minWidth: Resq.tapTarget,
+              minHeight: Resq.tapTarget,
+            ),
+          ),
+          const Spacer(),
+          // Dots rather than a bar. Two or three questions is a short enough
+          // sequence to count at a glance, and a bar that moves in halves reads
+          // as a download rather than as progress through a conversation.
+          for (var i = 0; i < total; i++)
+            Padding(
+              padding: const EdgeInsets.only(left: 6),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 260),
+                curve: Curves.easeOutCubic,
+                width: i == index ? 22 : 8,
+                height: 8,
+                decoration: BoxDecoration(
+                  color: i <= index ? Resq.critical : Resq.border,
+                  borderRadius: BorderRadius.circular(Resq.radiusPill),
+                ),
               ),
             ),
-          ],
+          const SizedBox(width: Resq.space3),
+          Text(
+            '${index + 1}/$total',
+            style: ResqType.caption(color: Resq.inkMuted),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// One answer. Full width, tall, and the only thing to do on its row — one tap
+/// from someone who may be holding the phone in the hand they are not using to
+/// keep a casualty still.
+class _OptionCard extends StatefulWidget {
+  const _OptionCard({
+    required this.label,
+    required this.position,
+    required this.urdu,
+    required this.busy,
+    required this.enabled,
+    required this.onTap,
+  });
+
+  final String label;
+  final int position;
+  final bool urdu;
+  final bool busy;
+  final bool enabled;
+  final VoidCallback onTap;
+
+  @override
+  State<_OptionCard> createState() => _OptionCardState();
+}
+
+class _OptionCardState extends State<_OptionCard> {
+  bool _down = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final active = widget.busy;
+    final dim = !widget.enabled && !widget.busy;
+
+    return GestureDetector(
+      onTapDown: widget.enabled ? (_) => setState(() => _down = true) : null,
+      onTapUp: widget.enabled ? (_) => setState(() => _down = false) : null,
+      onTapCancel: widget.enabled ? () => setState(() => _down = false) : null,
+      onTap: widget.enabled ? widget.onTap : null,
+      child: AnimatedScale(
+        // Presses back under the thumb. On a screen where every control looks
+        // the same, the feel of the press is what confirms the tap landed.
+        scale: _down ? 0.975 : 1,
+        duration: const Duration(milliseconds: 110),
+        curve: Curves.easeOut,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          constraints: const BoxConstraints(minHeight: 78),
+          padding: const EdgeInsets.symmetric(
+            horizontal: Resq.space4,
+            vertical: Resq.space4,
+          ),
+          decoration: BoxDecoration(
+            color: active ? Resq.criticalTint : Resq.surface,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: active ? Resq.critical : Resq.border,
+              width: active ? 2 : 1.4,
+            ),
+            boxShadow: _down || dim
+                ? null
+                : [
+                    BoxShadow(
+                      color: Resq.ink.withValues(alpha: 0.05),
+                      blurRadius: 14,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+          ),
+          child: Row(
+            textDirection: widget.urdu ? TextDirection.rtl : TextDirection.ltr,
+            children: [
+              _Badge(position: widget.position, active: active, dim: dim),
+              const SizedBox(width: Resq.space4),
+              Expanded(
+                child: Text(
+                  widget.label,
+                  textAlign: widget.urdu ? TextAlign.right : TextAlign.left,
+                  style: widget.urdu
+                      ? ResqType.nastaliq(size: 19, color: dim ? Resq.inkFaint : Resq.ink)
+                      : ResqType.bodyStrong(color: dim ? Resq.inkFaint : Resq.ink)
+                          .copyWith(fontSize: 18, height: 1.3),
+                ),
+              ),
+              const SizedBox(width: Resq.space2),
+              SizedBox(
+                width: 22,
+                height: 22,
+                child: active
+                    ? const CircularProgressIndicator(
+                        strokeWidth: 2.4,
+                        color: Resq.critical,
+                      )
+                    : Icon(
+                        widget.urdu
+                            ? Icons.chevron_left_rounded
+                            : Icons.chevron_right_rounded,
+                        color: dim ? Resq.surfaceAlt : Resq.inkFaint,
+                      ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A, B, C down the left. Gives the eye somewhere to land and makes the options
+/// countable without reading them.
+class _Badge extends StatelessWidget {
+  const _Badge({required this.position, required this.active, required this.dim});
+
+  final int position;
+  final bool active;
+  final bool dim;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 160),
+      width: 38,
+      height: 38,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: active ? Resq.critical : Resq.surfaceAlt,
+        shape: BoxShape.circle,
+      ),
+      child: Text(
+        String.fromCharCode(65 + position),
+        style: ResqType.bodyStrong(
+          color: active ? Colors.white : (dim ? Resq.inkFaint : Resq.inkSoft),
+        ).copyWith(fontSize: 15),
+      ),
+    );
+  }
+}
+
+/// The way out, on every question.
+///
+/// Visible and plainly worded rather than greyed into a corner: it is what
+/// bounds the delay that asking before sending imposes, and someone who cannot
+/// answer — because they are doing compressions, because they genuinely do not
+/// know — needs it to be the easiest thing on the screen to find.
+class _SkipBar extends StatelessWidget {
+  const _SkipBar({required this.onSkip});
+
+  final VoidCallback? onSkip;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(Resq.space5, 0, Resq.space5, Resq.space4),
+      child: TextButton(
+        onPressed: onSkip,
+        style: TextButton.styleFrom(
+          minimumSize: const Size.fromHeight(52),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(Resq.radiusControl),
+          ),
+        ),
+        child: Text(
+          'Skip and send the report',
+          style: ResqType.button(color: Resq.inkSoft),
         ),
       ),
     );
@@ -264,78 +495,6 @@ class _WritingState extends State<_Writing> {
           stage: _stage,
           stages: widget.stages,
           footnote: 'The hospital will have this before the ambulance arrives.',
-        ),
-      ),
-    );
-  }
-}
-
-/// Full width, tall, and the only thing to do on the row. One tap from someone
-/// who may be holding the phone in the hand they are not using to keep a
-/// casualty still.
-class _OptionButton extends StatelessWidget {
-  const _OptionButton({
-    required this.label,
-    required this.busy,
-    required this.enabled,
-    required this.onTap,
-    this.urdu = false,
-  });
-
-  final String label;
-  final bool busy;
-  final bool enabled;
-  final bool urdu;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Resq.surface,
-      borderRadius: BorderRadius.circular(Resq.radiusCard),
-      child: InkWell(
-        onTap: enabled ? onTap : null,
-        borderRadius: BorderRadius.circular(Resq.radiusCard),
-        child: Container(
-          constraints: const BoxConstraints(minHeight: 68),
-          padding: const EdgeInsets.symmetric(
-            horizontal: Resq.space4,
-            vertical: Resq.space3,
-          ),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(Resq.radiusCard),
-            border: Border.all(color: busy ? Resq.brandInk : Resq.border),
-          ),
-          child: Row(
-            textDirection: urdu ? TextDirection.rtl : TextDirection.ltr,
-            children: [
-              Expanded(
-                child: Text(
-                  label,
-                  textAlign: urdu ? TextAlign.right : TextAlign.left,
-                  style: urdu
-                      ? ResqType.nastaliq(
-                          size: 18,
-                          color: enabled || busy ? Resq.ink : Resq.inkFaint,
-                        )
-                      : ResqType.bodyStrong(
-                          color: enabled || busy ? Resq.ink : Resq.inkFaint,
-                        ).copyWith(fontSize: 17),
-                ),
-              ),
-              if (busy)
-                const SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2.2, color: Resq.brandInk),
-                )
-              else
-                Icon(
-                  Icons.chevron_right_rounded,
-                  color: enabled ? Resq.inkFaint : Resq.surfaceAlt,
-                ),
-            ],
-          ),
         ),
       ),
     );
